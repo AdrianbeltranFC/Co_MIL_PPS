@@ -8,6 +8,11 @@ Pillow
 # Estructuras de datos complejas para lotes MIL (Capítulo 7.1)
 tensordict
 
+# para la interfaz gráfica de selección de carpetas
+customtkinter 
 # torchmil # Descomentar cuando comiences la integración estandarizada de MIL
 
+pip install matplotlib # para visualización de resultados y depuración
+
 # pip install -r requirements.txt # para instalar todas las dependencias necesarias para el proyecto CO-MIL.
+# pip install -r CO-MIL\requirements.txt # para instalar las dependencias específicas del módulo CO-MIL.
