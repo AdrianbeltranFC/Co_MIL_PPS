@@ -1,0 +1,13 @@
+# Core de PyTorch y Visión
+torch
+torchvision
+
+# Procesamiento de imágenes para el MVP de etiquetado
+Pillow
+
+# Estructuras de datos complejas para lotes MIL (Capítulo 7.1)
+tensordict
+
+# torchmil # Descomentar cuando comiences la integración estandarizada de MIL
+
+# pip install -r requirements.txt # para instalar todas las dependencias necesarias para el proyecto CO-MIL.
