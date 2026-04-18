@@ -10,7 +10,7 @@ tensordict
 
 # para la interfaz gráfica de selección de carpetas
 customtkinter 
-# torchmil # Descomentar cuando comiences la integración estandarizada de MIL
+torchmil # para la implementación de MIL en PyTorch, incluyendo el módulo CO-MIL.
 
 pip install matplotlib # para visualización de resultados y depuración
 
