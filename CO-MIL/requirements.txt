@@ -4,6 +4,7 @@ torchvision
 
 # Procesamiento de imágenes para el MVP de etiquetado
 Pillow
+opencv-python
 
 # Estructuras de datos complejas para lotes MIL (Capítulo 7.1)
 tensordict
