@@ -1,58 +1,68 @@
+"""
+=========================================================================================
+MÓDULO DE INGESTA DE DATOS (DATASET PARA Co-MIL)
+=========================================================================================
+TIPO DE SCRIPT: MÓDULO ESTRUCTURAL (NO SE EJECUTA DIRECTAMENTE).
+Es importado por los scripts de entrenamiento y validación.
+
+Objetivo:
+Gestiona la carga de las bolsas tensoriales serializadas (.pt) hacia la memoria RAM.
+Implementa una arquitectura compatible con la librería externa 'torchmil'.
+Para evitar crasheos de dimensionalidad con 'torchmil.data.collate_fn', el método
+__getitem__ devuelve estrictamente tensores biológicos, aislando los metadatos
+espaciales en un método independiente (get_metadata).
+=========================================================================================
+"""
+
 import os
 import glob
 import torch
 from torch.utils.data import Dataset
-from typing import List, Tuple, Dict
+import torchvision.transforms as transforms
+from typing import Tuple, Dict, Any
 
 class CoMILDataset(Dataset):
     """
-    Dataset personalizado para cargar bolsas de instancias generadas en la etapa
-    de preprocesamiento de úlceras de pie diabético.
+    Dataset personalizado para el Aprendizaje Multinstancia y Multietiqueta (MIML).
     """
-    def __init__(self, pt_folder: str):
+    def __init__(self, pt_folder: str, target_size: int = 224):
         super().__init__()
-        # Mapea todos los archivos .pt que contienen los diccionarios serializados
         self.file_paths = glob.glob(os.path.join(pt_folder, "*.pt"))
         if len(self.file_paths) == 0:
-            raise FileNotFoundError(f"No se encontraron tensores en {pt_folder}")
+            raise FileNotFoundError(f"No se encontraron tensores (.pt) en {pt_folder}")
+            
+        # Motor de Redimensionamiento Dinámico:
+        # Previene el colapso del backbone (MobileNetV2) estirando los parches de 
+        # alta densidad (ej. 56px) a la resolución operativa exigida (224px).
+        self.target_size = target_size
+        self.resize = transforms.Resize((self.target_size, self.target_size), antialias=True)
 
     def __len__(self) -> int:
         return len(self.file_paths)
 
     def __getitem__(self, idx: int) -> Tuple[torch.Tensor, torch.Tensor]:
         """
-        Retorna la bolsa X y el vector de etiquetas MIML Y.
+        Retorna ESTRICTAMENTE la Bolsa (X) y el Vector de Diagnóstico (Y).
+        Esta limpieza es obligatoria para la compatibilidad con torchmil.data.collate_fn.
         """
-        data: Dict[str, torch.Tensor] = torch.load(self.file_paths[idx])
-        bolsa_X = data['X']  # Tensor de forma [N, 3, 224, 224]
-        vector_Y = data['Y'] # Tensor de forma [3] (Granulación, Fibrina, Callo)
+        data = torch.load(self.file_paths[idx])
+        bolsa_X = data['X']  # Matriz biológica: [N, 3, H, W]
+        vector_Y = data['Y'] # Vector MIML dinámico
         
+        # Validación Geométrica: Si el parche difiere de 224px, se aplica interpolación.
+        if bolsa_X.shape[-1] != self.target_size:
+            bolsa_X = self.resize(bolsa_X)
+            
         return bolsa_X, vector_Y
 
-def collate_fn_comil(batch: List[Tuple[torch.Tensor, torch.Tensor]]) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-    """
-    Función de agrupamiento (collate) para manejar bolsas de tamaño dinámico.
-    Identifica la bolsa con mayor N en el mini-lote y rellena el resto con ceros,
-    generando una máscara booleana para ignorar los parches fantasma.
-    """
-    bolsas_X = [item[0] for item in batch]
-    vectores_Y = [item[1] for item in batch]
-
-    # Encontrar la N máxima en el batch actual
-    max_n = max(x.size(0) for x in bolsas_X)
-    _, C, H, W = bolsas_X[0].shape
-    batch_size = len(batch)
-
-    # Inicializar tensores vacíos (rellenados con ceros)
-    padded_X = torch.zeros((batch_size, max_n, C, H, W), dtype=torch.float32)
-    # Máscara booleana: True para instancias reales, False para padding
-    mask = torch.zeros((batch_size, max_n), dtype=torch.bool)
-    
-    Y_batch = torch.stack(vectores_Y)
-
-    for i, x in enumerate(bolsas_X):
-        n = x.size(0)
-        padded_X[i, :n] = x
-        mask[i, :n] = True  # Activamos las posiciones con tejido biológico real
-
-    return padded_X, Y_batch, mask
+    def get_metadata(self, idx: int) -> Dict[str, Any]:
+        """
+        Método asíncrono para recuperar la topología original de la úlcera.
+        Permite a los scripts visuales reconstruir mapas de calor sin contaminar 
+        el flujo de tensores del entrenamiento.
+        """
+        data = torch.load(self.file_paths[idx])
+        meta = data.get('spatial_metadata', {})
+        # Preserva el mapeo de los tejidos anotados dinámicamente por el experto
+        meta['class_names'] = data.get('class_names', ["Granulación", "Fibrina", "Callo"])
+        return meta

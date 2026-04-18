@@ -1,131 +1,153 @@
 """
 =========================================================================================
-SCRIPT DE VALIDACIÓN DE FLUJO Y VISUALIZACIÓN DE ATENCIÓN (MVP)
+SCRIPT DE VALIDACIÓN DE FLUJO: MAPA DE CALOR WSSS (SELECCIÓN MANUAL)
 =========================================================================================
+TIPO DE SCRIPT: EJECUTABLE (DEBUGGING VISUAL).
+CÓMO EJECUTAR DESDE VS CODE: python CO-MIL/validar_flujo_visual.py
+
 Objetivo: 
-Confirmar que el pipeline de datos (Dataset -> DataLoader -> Modelo Co-MIL) funciona 
-sin errores de dimensionalidad y generar un gráfico de los mapas de atención 
-para evaluación visual en documentos académicos (Tesis).
-
-Nota: Al usar un modelo no entrenado, los pesos de atención serán aleatorios, pero 
-la estructura del tensor será matemáticamente correcta.
-
-# Correr con: python CO-MIL\validar_flujo_visual.py
+1. Cargar una bolsa tensorial (.pt) específica seleccionada por el usuario.
+2. Aplicar la protección geométrica (reescalado a 224px) requerida por MobileNetV2.
+3. Simular un lote de tamaño 1 (Batch=1) para ejecutar el Forward Pass en la red.
+4. Proyectar los pesos de atención (aleatorios pre-entrenamiento) sobre la fotografía 
+   real para generar el Heatmap diagnóstico WSSS.
 =========================================================================================
 """
 
 import os
-import sys # Importante para manipular las rutas del sistema
+import sys
 import torch
 import matplotlib.pyplot as plt
 import numpy as np
-from torch.utils.data import DataLoader
+import tkinter as tk
+from tkinter import filedialog
+import torchvision.transforms as transforms
+import cv2
 
-# Pedirle a Python que busque mis módulos en la misma carpeta 
-# donde está guardado este script (CO-MIL), sin importar desde 
-# dónde abrí la terminal. 
+# =====================================================================
+# Configuración de Rutas para importar módulos locales
 # =====================================================================
 directorio_actual = os.path.dirname(os.path.abspath(__file__))
 if directorio_actual not in sys.path:
     sys.path.append(directorio_actual)
-# Importamos las clases que construiste previamente
-from dataset import CoMILDataset, collate_fn_comil
+
 from Models.attention_mil import CoMILNetwork
 
-def visualizar_atencion_tesis(bolsa_X: torch.Tensor, pesos_atencion: torch.Tensor, vector_Y: torch.Tensor, max_parches: int = 5):
+def visualizar_heatmap_anatomico(bolsa_X: torch.Tensor, pesos_atencion: torch.Tensor, meta: dict, vector_Y: list):
     """
-    Genera un gráfico que muestra las instancias (parches)
-    junto con el peso matemático que la red neuronal le asignó a cada uno.
-    
-    Args:
-        bolsa_X: Tensor de la bolsa con forma [N, 3, 224, 224].
-        pesos_atencion: Tensor 1D con los pesos probabilísticos de atención.
-        vector_Y: Las etiquetas reales de la bolsa.
-        max_parches: Límite de recortes a dibujar para mantener la estética.
+    Fusiona los tensores biológicos y los coeficientes de atención en un solo lienzo.
     """
-    # Convertimos los tensores a NumPy para trabajar con Matplotlib
-    pesos = pesos_atencion.detach().cpu().numpy()
-    Y = vector_Y.detach().cpu().numpy()
-    
-    # Ordenamos los parches de mayor a menor atención
-    # argsort devuelve los índices ordenados de menor a mayor, [::-1] los invierte
-    indices_top = np.argsort(pesos)[::-1][:max_parches]
-    
-    fig, axes = plt.subplots(1, len(indices_top), figsize=(15, 4))
-    fig.suptitle(
-        f'Validación de Flujo: Parches con Mayor Nivel de Atención\nEtiqueta Global (Granulación, Fibrina, Callo): {Y.tolist()}', 
-        fontsize=14, fontweight='bold', color='#333333'
-    )
-    
-    for i, idx in enumerate(indices_top):
-        # Desnormalizamos y permutamos el parche de [C, H, W] a [H, W, C]
-        parche = bolsa_X[idx].permute(1, 2, 0).numpy()
-        
-        # Clip para asegurar que los valores RGB estén entre 0 y 1 para matplotlib
-        parche = np.clip(parche, 0, 1) 
-        
-        ax = axes[i] if len(indices_top) > 1 else axes
-        ax.imshow(parche)
-        
-        # Diseño académico: Mostrar el peso probabilístico con 4 decimales
-        peso_actual = pesos[idx]
-        ax.set_title(f"Parche #{idx}\nAtención (α): {peso_actual:.4f}", fontsize=11)
-        ax.axis('off')
-        
-        # Añadimos un borde sutil para enmarcar el parche
-        for spine in ax.spines.values():
-            spine.set_visible(True)
-            spine.set_color('#cccccc')
-            spine.set_linewidth(1)
+    if not meta.get('grid_shape'):
+        print("[!] Advertencia: Bolsa sin metadata espacial. Genera las bolsas nuevamente con la UI.")
+        return
 
+    grid_h, grid_w = meta['grid_shape']
+    patch_size = meta['patch_size']
+    class_names = meta.get('class_names', ["Granulación", "Fibrina", "Callo"])
+    
+    # 1. Lienzo para reconstruir la anatomía visual
+    full_recon = np.zeros((grid_h * patch_size, grid_w * patch_size, 3))
+    
+    # 2. Matriz 2D para mapear matemáticamente la atención de la red
+    attention_map_2d = np.zeros((grid_h, grid_w))
+    
+    idx = 0
+    for r in range(grid_h):
+        for c in range(grid_w):
+            if idx < bolsa_X.shape[0]:
+                # Inyección visual: de [C, H, W] a [H, W, C]
+                parche = bolsa_X[idx].permute(1, 2, 0).numpy()
+                full_recon[r*patch_size:(r+1)*patch_size, c*patch_size:(c+1)*patch_size, :] = parche
+                
+                # Inyección del peso de atención extraído del tensor del modelo
+                attention_map_2d[r, c] = pesos_atencion[idx].item()
+                idx += 1
+
+    # 3. Escalamiento del mapa de calor para que coincida exactamente con la fotografía
+    attention_heatmap_upscaled = cv2.resize(attention_map_2d, (grid_w * patch_size, grid_h * patch_size), interpolation=cv2.INTER_NEAREST)
+
+    # 4. Renderizado Final
+    plt.style.use('dark_background')
+    fig, ax = plt.subplots(figsize=(10, 8))
+    
+    ax.imshow(np.clip(full_recon, 0, 1))
+    
+    # Superposición de atención (Capa Alpha con Colormap 'jet')
+    im = ax.imshow(attention_heatmap_upscaled, cmap='jet', alpha=0.5)
+    plt.colorbar(im, fraction=0.046, pad=0.04, label="Peso Probabilístico de Atención (Alfa)")
+    
+    # Decodificamos el vector Y a texto
+    etiquetas_activas = [class_names[i] for i, val in enumerate(vector_Y) if val == 1]
+    diagnostico_texto = ', '.join(etiquetas_activas) if etiquetas_activas else 'Negativo / Sin Tejidos'
+    
+    ax.set_title(f"Validación WSSS: Gated Attention Heatmap\nDiagnóstico Global (MIML): {diagnostico_texto}", fontsize=12, pad=15)
+    ax.axis('off')
+    
+    print("\n[+] Renderizando Mapa de Calor WSSS.")
+    print("    (Nota: Los puntos de calor son aleatorios porque la red aún no está entrenada).")
     plt.tight_layout()
     plt.show()
 
-def validar_pipeline():
-    # 1. Configuración de Rutas (Tu directorio específico)
-    ruta_bolsas = r"C:\Users\silvi\OneDrive\Documents\Co_MIL_PPS\Heridas\Bolsas_MIL_Procesadas"
+def validar_pipeline_manual():
+    # --- 1. SELECCIÓN MANUAL DEL ARCHIVO ---
+    root = tk.Tk()
+    root.withdraw()
+    root.attributes('-topmost', True) 
     
-    print(f"--- Iniciando Validación MVP en: {ruta_bolsas} ---")
+    file_path = filedialog.askopenfilename(
+        title="Seleccionar Tensor de Úlcera (.pt) para Validación",
+        filetypes=[("PyTorch Tensors", "*.pt")]
+    )
     
-    # 2. Instanciación del Dataset y DataLoader
-    try:
-        dataset = CoMILDataset(pt_folder=ruta_bolsas)
-        print(f"Éxito: Se detectaron {len(dataset)} bolsas (.pt).")
-    except FileNotFoundError as e:
-        print(f"Error crítico: {e}")
+    if not file_path:
+        print("Operación cancelada.")
         return
+        
+    print(f"\n--- Iniciando Validación MIL para: {os.path.basename(file_path)} ---")
 
-    # Usamos batch_size=2 para forzar al collate_fn a manejar el padding dinámico
-    dataloader = DataLoader(dataset, batch_size=2, shuffle=True, collate_fn=collate_fn_comil)
+    # --- 2. CARGA Y EXTRACCIÓN DE DATOS ---
+    data = torch.load(file_path)
+    bolsa_X = data['X']                 # Tensor original [N, 3, H, W]
+    vector_Y = data['Y']                # Tensor MIML [Num_Clases]
+    meta = data.get('spatial_metadata', {})
+    meta['class_names'] = data.get('class_names', ["Granulación", "Fibrina", "Callo"])
     
-    # 3. Instanciación de la Red Co-MIL
-    print("Cargando arquitectura de red (InstanceEncoder + Attention + Classifier)...")
-    modelo = CoMILNetwork()
-    modelo.eval() # Modo evaluación para congelar Dropouts y BatchNorms
+    num_tejidos = len(meta['class_names'])
+    print(f"-> Clases dinámicas detectadas ({num_tejidos}): {meta['class_names']}")
+
+    # --- 3. PROTECCIÓN GEOMÉTRICA (Emulación del Dataset) ---
+    # MobileNetV2 exige 224px. Si el usuario elige un parche de 56px, lo escalamos en RAM.
+    target_size = 224
+    if bolsa_X.shape[-1] != target_size:
+        print(f"-> Redimensionando parche de {bolsa_X.shape[-1]}px a {target_size}px para MobileNetV2...")
+        resize_op = transforms.Resize((target_size, target_size), antialias=True)
+        bolsa_X_procesada = resize_op(bolsa_X)
+    else:
+        bolsa_X_procesada = bolsa_X
+
+    # --- 4. PREPARACIÓN DEL LOTE (BATCH = 1) ---
+    # La red espera [Batch, N, C, H, W]. Le agregamos la dimensión extra (unsqueeze).
+    batch_X = bolsa_X_procesada.unsqueeze(0)
     
-    # 4. Extracción de un Mini-lote (Batch)
-    batch_X, batch_Y, mask = next(iter(dataloader))
-    print(f"\nRadiografía del Lote:")
-    print(f"- Forma del Tensor X (Padded): {batch_X.shape} -> [Batch, Max_N, Canales, Alto, Ancho]")
-    print(f"- Forma de la Máscara: {mask.shape} -> Indica qué tensores son reales y cuáles son relleno negro")
+    # Creamos una máscara llena de "Trues" (1s) porque aquí no hay padding que ocultar, 
+    # ya que es una sola bolsa sin agrupar con otras más pequeñas.
+    mask = torch.ones((1, bolsa_X.shape[0]), dtype=torch.bool)
+
+    # --- 5. INFERENCIA EN LA RED Co-MIL ---
+    print("-> Ejecutando Forward Pass (MobileNetV2 + Gated Attention)...")
+    modelo = CoMILNetwork(num_classes=num_tejidos)
+    modelo.eval()
     
-    # 5. Pasaje hacia adelante (Forward Pass)
-    print("\nEjecutando Forward Pass a través de MobileNetV2 y Gated Attention...")
-    with torch.no_grad(): # Desactivamos el cálculo de gradientes para ahorrar memoria
+    with torch.no_grad(): 
         logits, probabilidades_atencion = modelo(batch_X, mask)
     
-    print(f"Forma de Logits de Salida: {logits.shape} -> [Batch, 3 Clases]")
-    print(f"Forma de Pesos de Atención: {probabilidades_atencion.shape} -> [Batch, Max_N]")
+    # --- 6. VISUALIZACIÓN ---
+    # Le pasamos a la función visualizadora la bolsa original (sin reescalar a 224) 
+    # para que la reconstrucción anatómica se vea perfecta a la resolución que elegiste (ej. 56px).
+    pesos_limpios = probabilidades_atencion[0]
+    vector_Y_list = vector_Y.tolist()
     
-    # 6. Visualización de Resultados para la primera imagen del lote
-    print("\nGenerando gráfico de diagnóstico...")
-    # Extraemos solo las instancias reales de la primera imagen (ignorando el padding)
-    instancias_reales_idx = mask[0].nonzero(as_tuple=True)[0]
-    
-    bolsa_limpia = batch_X[0][instancias_reales_idx]
-    pesos_limpios = probabilidades_atencion[0][instancias_reales_idx]
-    
-    visualizar_atencion_tesis(bolsa_limpia, pesos_limpios, batch_Y[0])
+    visualizar_heatmap_anatomico(bolsa_X, pesos_limpios, meta, vector_Y_list)
 
 if __name__ == "__main__":
-    validar_pipeline()
+    validar_pipeline_manual()
