@@ -2,7 +2,6 @@
 =========================================================================================
 INSPECTOR DE BOLSAS TENSORIALES (DEBUGGER VISUAL PARA Co-MIL)
 =========================================================================================
-Proyecto de Práctica Profesional Supervisada (PPS) - Análisis de Úlceras de Pie Diabético
 
 CONTEXTO Y OBJETIVO:
 Una vez que las imágenes crudas de las úlceras son procesadas, dejan de ser archivos 
