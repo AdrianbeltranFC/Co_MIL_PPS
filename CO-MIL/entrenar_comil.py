@@ -11,6 +11,39 @@ Calcular automáticamente el desbalanceo de clases para penalizar errores en tej
 congela el extractor visual para proteger los pesos de ImageNet, y optimiza 
 las ramas independientes usando Entropía Cruzada Binaria (BCE).
 =========================================================================================
+
+Notas para mi mismo:
+1.-
+Una vez que termines de generar todas tus bolsas con el etiquetador y las redimensiones,debo subir mi 
+carpeta completa del proyecto (la que tiene los scripts y la carpeta de Bolsas_MIL_Procesadas) a mi Google Drive.
+Sugerencia: Poner la carpeta directamente en la raíz del Drive y asegurar de que se llame Co_MIL_PPS.
+2.-
+Ir a colab.research.google.com y crea un nuevo cuaderno (New Notebook).
+En el menú superior, hacer clic en Entorno de ejecución > Cambiar tipo de entorno de ejecución.
+En Acelerador de hardware, seleccionar T4 GPU y dale a Guardar.
+3.-
+En la primera celda de tu cuaderno, pegar este código para darle acceso a Colab a mis archivos y 
+descargar la librería médica que necesitas:
+-----------------------------------------------------------
+# Conectar Google Drive a Colab
+from google.colab import drive
+drive.mount('/content/drive')
+# Instalar la librería oficial para manejo de tensores MIL
+!pip install torchmil
+-----------------------------------------------------------
+4.-
+En la segunda celda, simplemente debo llamar al script exactamente como lo haría en la terminal de 
+VS Code, pero apuntando a la ruta de Drive:
+-----------------------------------------------------------
+# Movernos a la carpeta del proyecto
+%cd "/content/drive/MyDrive/Co_MIL_PPS"
+# Iniciar el motor de entrenamiento de la Fase 1
+!python CO-MIL/entrenar_comil.py
+-----------------------------------------------------------
+Al terminar, los pesos de la red se guardarán automáticamente en mi propia carpeta de Google Drive 
+(Pesos_Entrenados/comil_miml_fase1.pth), seguros y listos para que los descargue a la laptop.
+ouuuyeah
+
 """
 
 import os
