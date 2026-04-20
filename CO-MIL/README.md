@@ -126,16 +126,43 @@ python -c "import torchmil; print('TorchMIL instalado correctamente')"
 
 ## 🚀 Guía Rápida de Uso
 
-### Flujo Típico (5 pasos)
+### Flujo Típico del Proyecto
 
 ```mermaid
-graph LR
-    A[Imágenes Crudas] -->|generador_bolsas.py| B[Bolsas Etiquetadas 224px]
-    B -->|reprocesador_dataset.py| C[Bolsas Multiresolución 56px]
-    C -->|inspector_bolsas.py| D[✓ Auditoría]
-    D -->|entrenar_comil.py| E[Modelo Entrenado]
-    E -->|validar_flujo_visual.py| F[Mapas de Atención]
-    E -->|evaluar_comil.py| G[Métricas MIML]
+graph TD
+    A["📷 Imágenes Clínicas<br/>Crudas"]
+    B["🖱️ Etiquetado<br/>Interactivo<br/>generador_bolsas.py"]
+    C["📦 Bolsas MIML<br/>224×224 px"]
+    D["⚙️ Redimensionamiento<br/>Opcional<br/>reprocesador_dataset.py"]
+    E["🔍 Auditoría<br/>inspector_bolsas.py"]
+    F["✓ Validación<br/>de Integridad"]
+    G["🚀 Entrenamiento<br/>Fase 1<br/>entrenar_comil.py"]
+    H["🧠 Modelo<br/>Entrenado"]
+    I["📊 Visualización<br/>validar_flujo_visual.py"]
+    J["📈 Evaluación<br/>evaluar_comil.py"]
+    K["✅ Heatmaps<br/>CAM"]
+    L["📋 Métricas<br/>MIML"]
+    
+    A --> B
+    B --> C
+    C --> D
+    D --> C
+    C --> E
+    E --> F
+    F --> G
+    G --> H
+    H --> I
+    I --> K
+    H --> J
+    J --> L
+    
+    style A fill:#e1f5ff,stroke:#01579b,stroke-width:2px
+    style B fill:#fff3e0,stroke:#e65100,stroke-width:2px
+    style C fill:#f3e5f5,stroke:#4a148c,stroke-width:2px
+    style G fill:#fff3e0,stroke:#e65100,stroke-width:2px
+    style H fill:#f3e5f5,stroke:#4a148c,stroke-width:2px
+    style K fill:#e8f5e9,stroke:#1b5e20,stroke-width:2px
+    style L fill:#e8f5e9,stroke:#1b5e20,stroke-width:2px
 ```
 
 ---
@@ -236,15 +263,15 @@ python CO-MIL/evaluar_comil.py
 
 El sistema evalúa la relevancia clínica de cada parche mediante un sistema de compuertas probabilísticas:
 
-$$\alpha_{i}^{k} = \frac{\exp\left\{w_k^{T}(\tanh(Vh_{i}^{T}) \odot \sigma(Uh_{i}^{T}))\right\}}{\sum_{j=1}^{N}\exp\left\{w_k^{T}(\tanh(Vh_{j}^{T}) \odot \sigma(Uh_{j}^{T}))\right\}}$$
+$$\alpha_{i}^{k} = \frac{\exp(w_k^T(\tanh(Vh_i^T) \odot \sigma(Uh_i^T)))}{\sum_{j=1}^{N}\exp(w_k^T(\tanh(Vh_j^T) \odot \sigma(Uh_j^T)))}$$
 
-**Donde:**
-- $\alpha_{i}^{k}$: Peso de atención del parche $i$ para la clase $k$ (tejido)
-- $h_i$: Vector de características del parche $i$ (1280-D desde MobileNetV2)
-- $V, U \in \mathbb{R}^{D \times L}$: Matrices de transformación lineal
-- $\odot$: Producto elemento a elemento (Hadamard)
-- $\sigma(\cdot)$: Función sigmoide
-- $\tanh(\cdot)$: Tangente hiperbólica
+**Parámetros:**
+- **α_i^k:** Peso de atención del parche i para la clase k (tejido)
+- **h_i:** Vector de características del parche i (1280-D desde MobileNetV2)
+- **V, U:** Matrices de transformación lineal de dimensión D×L
+- **⊙:** Producto elemento a elemento (Hadamard)
+- **σ(·):** Función sigmoide
+- **tanh(·):** Tangente hiperbólica
 
 ---
 
@@ -252,16 +279,18 @@ $$\alpha_{i}^{k} = \frac{\exp\left\{w_k^{T}(\tanh(Vh_{i}^{T}) \odot \sigma(Uh_{i
 
 La optimización de las $K$ ramas independientes se realiza usando Entropía Cruzada Binaria ponderada por clase:
 
-$$\mathcal{L} = -\sum_{c=1}^{K} w_{c} \left[ y_{c} \log(\sigma(z_{c})) + (1 - y_{c}) \log(1 - \sigma(z_{c})) \right]$$
+$$\mathcal{L} = -\sum_{c=1}^{K} w_c [y_c \log(\sigma(z_c)) + (1 - y_c) \log(1 - \sigma(z_c))]$$
 
-**Donde:**
-- $w_c$: Peso compensatorio para la clase $c$ (inversamente proporcional a frecuencia de positivos)
-- $y_c \in \{0,1\}$: Etiqueta binaria del tejido $c$ en la bolsa
-- $z_c$: Logit predicho para la clase $c$ (salida del clasificador)
-- $K$: Número total de clases (tejidos) en el dataset
+**Parámetros:**
+- **w_c:** Peso compensatorio para la clase c (inversamente proporcional a frecuencia de positivos)
+- **y_c ∈ {0,1}:** Etiqueta binaria del tejido c en la bolsa
+- **z_c:** Logit predicho para la clase c (salida del clasificador)
+- **K:** Número total de clases (tejidos) en el dataset
 
 **Cálculo dinámico de pesos:**
-$$w_c = \frac{\text{Total de muestras}}{\text{Muestras positivas de clase } c} \cdot \text{factor de escala}$$
+$$w_c = \frac{N_{total}}{N_{positivos}^c}$$
+
+Donde N_total es el total de muestras y N_positivos^c es la cantidad de muestras positivas para la clase c.
 
 ---
 
@@ -269,9 +298,9 @@ $$w_c = \frac{\text{Total de muestras}}{\text{Muestras positivas de clase } c} \
 
 Para visualización clínica, los pesos de atención se proyectan a la resolución espacial original:
 
-$$\text{CAM}_{k}(x, y) = \text{Resize}\left(\sum_{i=1}^{N} \alpha_{i}^{k} \cdot M_i(x,y), \text{original\_resolution}\right)$$
+$$CAM_k(x,y) = Resize(\sum_{i=1}^{N} \alpha_i^k \cdot M_i(x,y), res_{original})$$
 
-Donde $M_i(x,y)$ es la máscara spatial que indica la región del parche $i$ en la imagen original.
+Donde M_i(x,y) es la máscara espacial que indica la región del parche i en la imagen original, y res_original es la resolución de la imagen clínica.
 
 ---
 
