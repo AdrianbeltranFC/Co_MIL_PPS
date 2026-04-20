@@ -266,12 +266,12 @@ El sistema evalúa la relevancia clínica de cada parche mediante un sistema de 
 $$\alpha_{i}^{k} = \frac{\exp(w_k^T(\tanh(Vh_i^T) \odot \sigma(Uh_i^T)))}{\sum_{j=1}^{N}\exp(w_k^T(\tanh(Vh_j^T) \odot \sigma(Uh_j^T)))}$$
 
 **Parámetros:**
-- **α_i^k:** Peso de atención del parche i para la clase k (tejido)
-- **h_i:** Vector de características del parche i (1280-D desde MobileNetV2)
-- **V, U:** Matrices de transformación lineal de dimensión D×L
-- **⊙:** Producto elemento a elemento (Hadamard)
-- **σ(·):** Función sigmoide
-- **tanh(·):** Tangente hiperbólica
+- $\alpha_i^k$: Peso de atención del parche $i$ para la clase $k$ (tejido)
+- $h_i$: Vector de características del parche $i$ (1280-D desde MobileNetV2)
+- $V, U$: Matrices de transformación lineal de dimensión $D \times L$
+- $\odot$: Producto elemento a elemento (Hadamard)
+- $\sigma(\cdot)$: Función sigmoide
+- $\tanh(\cdot)$: Tangente hiperbólica
 
 ---
 
@@ -282,15 +282,16 @@ La optimización de las $K$ ramas independientes se realiza usando Entropía Cru
 $$\mathcal{L} = -\sum_{c=1}^{K} w_c [y_c \log(\sigma(z_c)) + (1 - y_c) \log(1 - \sigma(z_c))]$$
 
 **Parámetros:**
-- **w_c:** Peso compensatorio para la clase c (inversamente proporcional a frecuencia de positivos)
-- **y_c ∈ {0,1}:** Etiqueta binaria del tejido c en la bolsa
-- **z_c:** Logit predicho para la clase c (salida del clasificador)
-- **K:** Número total de clases (tejidos) en el dataset
+- $w_c$: Peso compensatorio para la clase $c$ (inversamente proporcional a frecuencia de positivos)
+- $y_c \in \{0,1\}$: Etiqueta binaria del tejido $c$ en la bolsa
+- $z_c$: Logit predicho para la clase $c$ (salida del clasificador)
+- $K$: Número total de clases (tejidos) en el dataset
 
 **Cálculo dinámico de pesos:**
+
 $$w_c = \frac{N_{total}}{N_{positivos}^c}$$
 
-Donde N_total es el total de muestras y N_positivos^c es la cantidad de muestras positivas para la clase c.
+Donde $N_{total}$ es el total de muestras y $N_{positivos}^c$ es la cantidad de muestras positivas para la clase $c$.
 
 ---
 
@@ -450,7 +451,7 @@ Este proyecto está bajo licencia **MIT**. Ver archivo `LICENSE` para detalles.
 
 **Autor:** Adrián Emiliano Beltrán Fernández  
 **Institución:** Facultad de Ciencias, UNAM  
-**Correo:** [tu-email@unam.mx]
+**Correo:** [adrian_beltran@ciencias.unam.mx]
 
 Para reportar bugs o sugerir mejoras, por favor abre un **Issue** o **Pull Request** en el repositorio.
 
