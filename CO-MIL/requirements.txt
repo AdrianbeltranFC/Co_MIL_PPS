@@ -1,19 +1,13 @@
-# Core de PyTorch y Visión
 torch
 torchvision
-
-# Procesamiento de imágenes para el MVP de etiquetado
+torchmil
+tensordict
 Pillow
 opencv-python
-
-# Estructuras de datos complejas para lotes MIL (Capítulo 7.1)
-tensordict
-
-# para la interfaz gráfica de selección de carpetas
-customtkinter 
-torchmil # para la implementación de MIL en PyTorch, incluyendo el módulo CO-MIL.
-
-pip install matplotlib # para visualización de resultados y depuración
-
-# pip install -r requirements.txt # para instalar todas las dependencias necesarias para el proyecto CO-MIL.
-# pip install -r CO-MIL\requirements.txt # para instalar las dependencias específicas del módulo CO-MIL.
+customtkinter
+matplotlib
+numpy
+scikit-learn
+seaborn
+tqdm
+openpyxl

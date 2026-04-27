@@ -13,6 +13,12 @@ Bolsas_MIL_Procesadas/
 dataset/
 data/
 images/
+CO-MIL/custom_classes.json
+
+# Empaquetado desktop
+build/
+dist/
+*.spec
 
 # Archivos de sistema operativo y VS Code
 .vscode/
