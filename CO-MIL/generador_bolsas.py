@@ -24,8 +24,7 @@ Flujo de Procesamiento Matemático y Lógico:
 Características de la Interfaz:
 - Autoguardado silencioso de sesiones (archivos JSON) para no perder progreso.
 - Panel lateral deslizable para adaptarse a laptops con pantallas pequeñas.
-- "Visión de Parches" (Modo Investigador) para inspección visual de los tensores con 
-  mallado cyan, zoom dinámico y panel de análisis profesional fijo.
+- "Visión de Parches" (Modo Investigador) independiente y minimizable para inspección visual.
 - Registro de autoría (Firma del anotador) y manifiestos en CSV/XLSX.
 - Flexibilidad para renombrar clases base mediante una ventana modal independiente.
 
@@ -313,7 +312,7 @@ class EtiquetadorCoMIL(ctk.CTk):
         win_rename = ctk.CTkToplevel(self)
         win_rename.title("Renombrar Catálogo Maestro")
         win_rename.geometry("500x600")
-        win_rename.grab_set() # Convierte la ventana en modal
+        win_rename.grab_set() # Esta SÍ debe ser modal para no editar sobre la imagen al mismo tiempo
 
         lbl_info = ctk.CTkLabel(win_rename, text="Edita los nombres de las clases base.\nLos cambios se guardarán en el catálogo general.", font=ctk.CTkFont(weight="bold"))
         lbl_info.pack(pady=15, padx=20)
@@ -810,7 +809,7 @@ class EtiquetadorCoMIL(ctk.CTk):
         self.redraw_regions()
         self.schedule_autosave()
 
-# =========================================================
+    # =========================================================
     # VISUALIZADOR DE PARCHES (PANEL DE ANÁLISIS PROFESIONAL Y ZOOM)
     # =========================================================
     def show_patch_inspector(self):
@@ -919,7 +918,7 @@ class EtiquetadorCoMIL(ctk.CTk):
         slider_zoom.pack(side="left", fill="x", expand=True, padx=10)
         update_zoom(1.0) 
 
-        # NUEVO: Función y botón para guardar la imagen del mallado
+        # Función y botón para guardar la imagen del mallado
         base_name = self.get_current_image_base_name()
         
         def save_grid_image():
@@ -971,10 +970,10 @@ class EtiquetadorCoMIL(ctk.CTk):
         pad_l, pad_r, pad_t, pad_b = meta["padding_applied"]
         if any([pad_l, pad_r, pad_t, pad_b]):
             pad_str = f"Sí aplicado (Izq:{pad_l} Der:{pad_r} Arr:{pad_t} Aba:{pad_b})"
-            pad_color = "#ffb347" # Naranja para advertir que chocó con el borde
+            pad_color = "#ffb347" 
         else:
             pad_str = "No (Expansión pura)"
-            pad_color = "#28a745" # Verde (ideal)
+            pad_color = "#28a745"
 
         lbl_head1 = ctk.CTkLabel(col1, text="Datos Generales:", font=ctk.CTkFont(size=14, weight="bold"))
         lbl_head1.pack(anchor="w", pady=(5, 5))
@@ -990,7 +989,6 @@ class EtiquetadorCoMIL(ctk.CTk):
         create_data_label(col2, "Nº Total de Instancias (Parches):", f"{num_patches}", color="#4da3ff")
         create_data_label(col2, "Estructura de Cuadrícula (Malla):", f"{grid_h}x{grid_w}")
         create_data_label(col2, "Dimens. Totales de Bolsa (Px Real):", f"{total_p_real_w}x{total_p_real_h}")
-        # NUEVO: Etiqueta de Reflection Padding en Columna 2
         create_data_label(col2, "Reflection Padding:", f"{pad_str}", pad_color)
         
         frame_labels = ctk.CTkFrame(frame_analysis, corner_radius=5, fg_color="#2D3748")
@@ -1009,7 +1007,8 @@ class EtiquetadorCoMIL(ctk.CTk):
         lbl_val_tejidos = ctk.CTkLabel(frame_labels, text=labels_text, font=ctk.CTkFont(size=14, slant="italic"), text_color=color_tejido, wraplength=900, justify="left")
         lbl_val_tejidos.pack(pady=(5, 10), padx=10, anchor="w")
 
-        top.grab_set()
+        # ELIMINADO: top.grab_set() 
+        # Esto permite que la ventana sea no modal (se puede minimizar o dejar en segundo plano)
 
     # =========================================================
     # NÚCLEO MATEMÁTICO MIL Y SERIALIZACIÓN TENSORIAL
