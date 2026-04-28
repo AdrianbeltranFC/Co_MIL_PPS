@@ -1,13 +1,14 @@
-torch
-torchvision
-torchmil
-tensordict
-Pillow
-opencv-python
-customtkinter
-matplotlib
-numpy
-scikit-learn
-seaborn
-tqdm
-openpyxl
+torch          # Función: Proporciona una biblioteca de aprendizaje profundo de código abierto que permite a los desarrolladores crear y entrenar modelos de aprendizaje automático de manera eficiente. Es ampliamente utilizado para tareas como visión por computadora, procesamiento del lenguaje natural y aprendizaje por refuerzo.
+torchvision    # Función: Proporciona conjuntos de datos, modelos preentrenados y transformaciones comunes para visión por computadora.
+torchmil       # Función: Proporciona implementaciones de modelos de aprendizaje profundo para tareas de clasificación multi-instancia.
+tensordict     # Función: Proporciona una estructura de datos para almacenar tensores con claves asociadas.
+Pillow         # Función: Proporciona soporte para abrir, manipular y guardar imágenes en Python.
+opencv-python  # Función: Proporciona una biblioteca de visión por computadora que permite la detección y reconocimiento de objetos en imágenes.
+customtkinter  # Función: Proporciona una biblioteca de interfaz gráfica de usuario (GUI) personalizada para Python, basada en Tkinter, que permite crear interfaces de usuario atractivas y personalizables.
+matplotlib     # Función: Proporciona una biblioteca para crear visualizaciones de datos en Python.
+numpy          # Función: Proporciona soporte para arrays y operaciones matemáticas en Python.
+scikit-learn   # Función: Proporciona algoritmos de aprendizaje automático y herramientas para la minería de datos en Python.
+seaborn        # Función: Proporciona una biblioteca para crear visualizaciones de datos estadísticos en Python.
+tqdm           # Función: Proporciona una barra de progreso para iteraciones en Python.
+openpyxl       # Función: Proporciona soporte para leer y escribir archivos Excel en Python.
+pyinstaller    # Función: Proporciona una herramienta para empaquetar aplicaciones de Python en archivos ejecutables.
