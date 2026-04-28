@@ -458,4 +458,4 @@ Para reportar bugs o sugerir mejoras, por favor abre un **Issue** o **Pull Reque
 ---
 
 **Actualizado:** Abril 2026  
-**Estado del Proyecto:** 🟡 En desarrollo (Fase 1 y 2 completadas)
+**Estado del Proyecto:** 🟡 En desarrollo
