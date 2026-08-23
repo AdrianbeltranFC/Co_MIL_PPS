@@ -59,6 +59,9 @@ except ImportError:
     Workbook = None
     load_workbook = None
 
+import catalogo_tejidos
+from catalogo_tejidos import limpiar_texto as clean_label_text, normalizar_clave as normalize_label_key
+
 # Configuración visual de la librería gráfica
 ctk.set_appearance_mode("dark")
 ctk.set_default_color_theme("blue")
@@ -71,18 +74,6 @@ def get_app_dir() -> str:
     if getattr(sys, "frozen", False):
         return os.path.dirname(sys.executable)
     return os.path.dirname(os.path.abspath(__file__))
-
-
-def clean_label_text(label: str) -> str:
-    """Limpia espacios innecesarios en los nombres de las etiquetas."""
-    return " ".join(str(label).strip().split())
-
-
-def normalize_label_key(label: str) -> str:
-    """Normaliza las etiquetas ignorando mayúsculas y acentos para evitar duplicados."""
-    cleaned = clean_label_text(label)
-    folded = unicodedata.normalize("NFKD", cleaned).encode("ascii", "ignore").decode("ascii")
-    return folded.casefold()
 
 
 class EtiquetadorCoMIL(ctk.CTk):
@@ -136,21 +127,11 @@ class EtiquetadorCoMIL(ctk.CTk):
         # CATÁLOGO DE CLASES
         # ---------------------------------------------------------
         self.patch_size = 224
-        # ESTA ES LA LISTA MAESTRA. Al compilar el .exe, estas 10 clases 
+        # Lista maestra de clases base, definida en catalogo_tejidos.py (fuente
+        # única compartida con dataset.py). Al compilar el .exe, estas clases
         # serán las que el experto verá por defecto.
-        self.base_classes = [
-            "Tejido de Granulación",
-            "Fibrina (Esfacelo)",
-            "Tejido Necrótico (Escara)",
-            "Tejido Calloso (Hiperqueratosis)",
-            "Exudado",
-            "Epitelización",
-            "Hueso Expuesto",
-            "Tendón / Músculo Expuesto",
-            "Piel Perilesional Sana",
-            "Maceración / Eritema"
-        ]
-        
+        self.base_classes = list(catalogo_tejidos.CLASES_BASE)
+
         self.class_catalog = self.load_app_class_catalog()
         self.custom_classes = self.extract_custom_classes(self.class_catalog)
         self.label_vars: Dict[str, tk.IntVar] = {}
@@ -372,8 +353,12 @@ class EtiquetadorCoMIL(ctk.CTk):
             if old_name in region["labels"]:
                 region["labels"] = [new_name if l == old_name else l for l in region["labels"]]
         self.refresh_region_list()
-        
+
         self.save_app_class_catalog()
+        # Registrar el renombrado para que las bolsas ya guardadas con el
+        # nombre anterior se sigan resolviendo bien contra el catálogo vigente
+        # (ver catalogo_tejidos.py / dataset.py).
+        catalogo_tejidos.registrar_renombre(self.app_dir, old_name, new_name)
         messagebox.showinfo("Éxito", f"Clase renombrada a '{new_name}'")
 
     # =========================================================
@@ -1059,6 +1044,25 @@ class EtiquetadorCoMIL(ctk.CTk):
 
     def process_and_save(self):
         """Ejecuta el pipeline, inyecta la firma del autor y guarda en binario .pt"""
+        annotator = self.entry_annotator.get().strip()
+        if not annotator:
+            messagebox.showerror(
+                "Falta la firma",
+                "Ingresa tu nombre en el campo de firma (arriba del panel lateral) antes de "
+                "procesar la imagen.\n\nEsto es necesario para poder rastrear quién anotó cada "
+                "bolsa generada.",
+            )
+            return
+
+        if not messagebox.askyesno(
+            "Confirmar anotador",
+            f"¿Guardar esta imagen con la firma \"{annotator}\"?\n\n"
+            "El campo de firma no se limpia solo al cambiar de imagen — confírmalo cada vez, "
+            "sobre todo si más de una persona usa esta instalación.",
+        ):
+            self.entry_annotator.focus_set()
+            return
+
         if self.bbox or self.get_selected_labels():
             if messagebox.askyesno("ROI sin guardar", "¿Tienes un trazo sin agregar. Deseas incluirlo antes de procesar la imagen?"):
                 self.add_or_update_region()
@@ -1073,7 +1077,6 @@ class EtiquetadorCoMIL(ctk.CTk):
         os.makedirs(out_dir, exist_ok=True)
         base_name = self.get_current_image_base_name()
         total_rois = len(self.pending_regions)
-        annotator = self.entry_annotator.get().strip() or "Anonimo"
 
         for region_idx, region in enumerate(self.pending_regions):
             bolsa_x, spatial_meta = self.smart_expansion_and_extraction(self.current_image, region["bbox"], self.patch_size)

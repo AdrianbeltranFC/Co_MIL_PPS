@@ -79,7 +79,7 @@ def calcular_pos_weights(dataset: CoMILDataset, num_classes: int) -> torch.Tenso
     total_muestras = len(dataset)
 
     for i in tqdm(range(total_muestras), desc="Analizando distribuciones"):
-        _, y = dataset[i]
+        y = dataset[i]["Y"]
         conteo_positivos += y
 
     conteo_negativos = total_muestras - conteo_positivos
@@ -108,23 +108,42 @@ def congelar_backbone(modelo: nn.Module):
 
 def entrenar_modelo():
     # --- HIPERPARÁMETROS DE LA FASE 1 ---
-    # Ajusta esta ruta a donde guardes tus tensores de 224px (o los redimensionados de 56px)
-    RUTA_BOLSAS = r"Bolsas_MIL_Procesadas\224px" 
+    # Ruta absoluta por defecto para poder correr el script igual desde la raíz del
+    # repo o subiéndolo a Google Drive/Colab (ver notas al inicio del archivo).
+    # Ajusta RUTA_DATASET_ROOT si trabajas con otro lote (Dataset_Adrian_100, etc.).
+    RAIZ_REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    RUTA_DATASET_ROOT = os.path.join(RAIZ_REPO, "APP_generador_bolsas", "Dataset_Experto_100")
+    RUTA_BOLSAS = os.path.join(RUTA_DATASET_ROOT, "Bolsas_MIL_Procesadas", "224px")
+    RUTA_MANIFEST = os.path.join(RUTA_DATASET_ROOT, "Bolsas_MIL_Procesadas", "splits_manifest.json")
+    RUTA_PESOS_DIR = os.path.join(RAIZ_REPO, "Pesos_Entrenados")
     EPOCHS = 30
     BATCH_SIZE = 8
     LEARNING_RATE = 1e-4
-    
+
     dispositivo = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"=== INICIANDO MOTOR Co-MIL EN DISPOSITIVO: {dispositivo.type.upper()} ===")
 
-    # --- INGESTA DE DATOS Y TOPOLOGÍA DINÁMICA ---
-    try:
-        # Se fuerza el target_size a 224px para proteger la entrada del backbone
-        dataset = CoMILDataset(pt_folder=RUTA_BOLSAS, target_size=224)
-    except FileNotFoundError:
-        print(f"[!] Error: No se encontraron bolsas en {RUTA_BOLSAS}")
+    if not os.path.exists(RUTA_MANIFEST):
+        print(f"[!] Error: no existe {RUTA_MANIFEST}.")
+        print("    Corre primero: python CO-MIL/particionar_dataset.py --bolsas \"{}\"".format(RUTA_BOLSAS))
         return
 
+    # --- INGESTA DE DATOS Y TOPOLOGÍA DINÁMICA ---
+    # Se entrena SOLO sobre el split 'train' del manifiesto (nunca sobre todo el
+    # dataset) y con aumento de datos activado, dado el tamaño pequeño del dataset.
+    try:
+        dataset = CoMILDataset(
+            pt_folder=RUTA_BOLSAS,
+            target_size=224,
+            manifest_path=RUTA_MANIFEST,
+            split="train",
+            augment=True,
+        )
+    except (FileNotFoundError, ValueError) as e:
+        print(f"[!] Error: {e}")
+        return
+
+    print(f"-> Entrenando sobre el split 'train': {len(dataset)} bolsas (con aumento de datos activo).")
     dataloader = DataLoader(dataset, batch_size=BATCH_SIZE, shuffle=True, collate_fn=collate_fn)
     
     # La red averigua cuántas ramas crear leyendo el primer tensor
@@ -157,8 +176,14 @@ def entrenar_modelo():
         
         barra_batches = tqdm(dataloader, desc=f"Época {epoch+1:02d}/{EPOCHS}")
         
-        for batch_X, batch_Y, mask in barra_batches:
-            batch_X, batch_Y, mask = batch_X.to(dispositivo), batch_Y.to(dispositivo), mask.to(dispositivo)
+        for batch in barra_batches:
+            # collate_fn de torchmil (v1.0.2) devuelve un TensorDict con las
+            # claves X, Y y mask (esta última generada automáticamente a
+            # partir del padding de X). La máscara llega en uint8; se castea
+            # a bool porque AttentionAggregator la niega con '~' (negación
+            # lógica, no bit a bit).
+            batch = batch.to(dispositivo)
+            batch_X, batch_Y, mask = batch["X"], batch["Y"], batch["mask"].bool()
 
             # 1. Limpieza de memoria matemática
             optimizador.zero_grad()
@@ -185,17 +210,21 @@ def entrenar_modelo():
     print("\n=== ENTRENAMIENTO FASE 1 FINALIZADO CON ÉXITO ===")
     
     # --- GUARDADO ESTRUCTURADO ---
-    os.makedirs("Pesos_Entrenados", exist_ok=True)
-    ruta_modelo = os.path.join("Pesos_Entrenados", "comil_miml_fase1.pth")
-    
-    # Guardamos los pesos y la configuración clave para no perderla en la Fase 2
+    os.makedirs(RUTA_PESOS_DIR, exist_ok=True)
+    ruta_modelo = os.path.join(RUTA_PESOS_DIR, "comil_miml_fase1.pth")
+
+    # Guardamos los pesos y la configuración clave para no perderla en la Fase 2.
+    # Se incluyen las rutas de dataset/manifiesto usadas para entrenar, para que
+    # evaluar_comil.py pueda encontrar el split correcto sin volver a adivinarlo.
     torch.save({
         'epoch': EPOCHS,
         'model_state_dict': modelo.state_dict(),
         'optimizer_state_dict': optimizador.state_dict(),
         'loss': historial_loss[-1],
         'num_classes': num_tejidos,
-        'class_names': meta_info['class_names']
+        'class_names': meta_info['class_names'],
+        'ruta_bolsas': RUTA_BOLSAS,
+        'ruta_manifest': RUTA_MANIFEST,
     }, ruta_modelo)
     
     print(f"[+] Diccionario del modelo guardado en: {ruta_modelo}")
