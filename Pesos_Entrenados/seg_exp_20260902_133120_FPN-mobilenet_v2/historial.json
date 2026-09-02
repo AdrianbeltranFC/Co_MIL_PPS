@@ -1,0 +1,612 @@
+[
+  {
+    "epoca": 1,
+    "loss_train": 0.7364192068576813,
+    "val_dice_tejidos": 0.07702885294179936
+  },
+  {
+    "epoca": 2,
+    "loss_train": 0.49126281440258024,
+    "val_dice_tejidos": 0.31589082103621485
+  },
+  {
+    "epoca": 3,
+    "loss_train": 0.4044029742479324,
+    "val_dice_tejidos": 0.31915371895980654
+  },
+  {
+    "epoca": 4,
+    "loss_train": 0.3489107757806778,
+    "val_dice_tejidos": 0.417125101016095
+  },
+  {
+    "epoca": 5,
+    "loss_train": 0.31472885608673096,
+    "val_dice_tejidos": 0.49488392833647904
+  },
+  {
+    "epoca": 6,
+    "loss_train": 0.3192477017641068,
+    "val_dice_tejidos": 0.4931020903920187
+  },
+  {
+    "epoca": 7,
+    "loss_train": 0.2880830645561218,
+    "val_dice_tejidos": 0.5322328355454379
+  },
+  {
+    "epoca": 8,
+    "loss_train": 0.2789190232753754,
+    "val_dice_tejidos": 0.5388319372486577
+  },
+  {
+    "epoca": 9,
+    "loss_train": 0.28100544661283494,
+    "val_dice_tejidos": 0.5297516906015489
+  },
+  {
+    "epoca": 10,
+    "loss_train": 0.25503222495317457,
+    "val_dice_tejidos": 0.5497262622037662
+  },
+  {
+    "epoca": 11,
+    "loss_train": 0.2606143534183502,
+    "val_dice_tejidos": 0.5121813811097741
+  },
+  {
+    "epoca": 12,
+    "loss_train": 0.25284852683544157,
+    "val_dice_tejidos": 0.5401478960464273
+  },
+  {
+    "epoca": 13,
+    "loss_train": 0.2524275630712509,
+    "val_dice_tejidos": 0.584892953014401
+  },
+  {
+    "epoca": 14,
+    "loss_train": 0.23649961352348328,
+    "val_dice_tejidos": 0.5758556199887205
+  },
+  {
+    "epoca": 15,
+    "loss_train": 0.24055581390857697,
+    "val_dice_tejidos": 0.5814093553296675
+  },
+  {
+    "epoca": 16,
+    "loss_train": 0.2253166049718857,
+    "val_dice_tejidos": 0.573051453760424
+  },
+  {
+    "epoca": 17,
+    "loss_train": 0.21190318912267686,
+    "val_dice_tejidos": 0.5943110637263844
+  },
+  {
+    "epoca": 18,
+    "loss_train": 0.208088019490242,
+    "val_dice_tejidos": 0.6085602664101045
+  },
+  {
+    "epoca": 19,
+    "loss_train": 0.21881235390901566,
+    "val_dice_tejidos": 0.5799198134554795
+  },
+  {
+    "epoca": 20,
+    "loss_train": 0.21404186338186265,
+    "val_dice_tejidos": 0.5925121278372276
+  },
+  {
+    "epoca": 21,
+    "loss_train": 0.20717255473136903,
+    "val_dice_tejidos": 0.5765399655466427
+  },
+  {
+    "epoca": 22,
+    "loss_train": 0.21329252421855927,
+    "val_dice_tejidos": 0.5971537788956359
+  },
+  {
+    "epoca": 23,
+    "loss_train": 0.21693542152643203,
+    "val_dice_tejidos": 0.5888192061095524
+  },
+  {
+    "epoca": 24,
+    "loss_train": 0.20421466678380967,
+    "val_dice_tejidos": 0.598670690444119
+  },
+  {
+    "epoca": 25,
+    "loss_train": 0.20456767380237578,
+    "val_dice_tejidos": 0.5857588837846133
+  },
+  {
+    "epoca": 26,
+    "loss_train": 0.19960668981075286,
+    "val_dice_tejidos": 0.5758717506766151
+  },
+  {
+    "epoca": 27,
+    "loss_train": 0.20314969420433043,
+    "val_dice_tejidos": 0.5893771409939382
+  },
+  {
+    "epoca": 28,
+    "loss_train": 0.20991613417863847,
+    "val_dice_tejidos": 0.5206053157185037
+  },
+  {
+    "epoca": 29,
+    "loss_train": 0.20287544131278992,
+    "val_dice_tejidos": 0.5810157644775356
+  },
+  {
+    "epoca": 30,
+    "loss_train": 0.18861795216798782,
+    "val_dice_tejidos": 0.5985000722866979
+  },
+  {
+    "epoca": 31,
+    "loss_train": 0.1851708009839058,
+    "val_dice_tejidos": 0.6088658179434706
+  },
+  {
+    "epoca": 32,
+    "loss_train": 0.18729076385498047,
+    "val_dice_tejidos": 0.5891356833771865
+  },
+  {
+    "epoca": 33,
+    "loss_train": 0.17534771114587783,
+    "val_dice_tejidos": 0.5873989085585586
+  },
+  {
+    "epoca": 34,
+    "loss_train": 0.17465958446264268,
+    "val_dice_tejidos": 0.5814684849036521
+  },
+  {
+    "epoca": 35,
+    "loss_train": 0.1753225326538086,
+    "val_dice_tejidos": 0.5694595451912753
+  },
+  {
+    "epoca": 36,
+    "loss_train": 0.17653130888938903,
+    "val_dice_tejidos": 0.5859055840675392
+  },
+  {
+    "epoca": 37,
+    "loss_train": 0.1732681691646576,
+    "val_dice_tejidos": 0.5750428686632547
+  },
+  {
+    "epoca": 38,
+    "loss_train": 0.17090172469615936,
+    "val_dice_tejidos": 0.5798209710682709
+  },
+  {
+    "epoca": 39,
+    "loss_train": 0.16507368832826613,
+    "val_dice_tejidos": 0.5891836408951983
+  },
+  {
+    "epoca": 40,
+    "loss_train": 0.17000772356986998,
+    "val_dice_tejidos": 0.5845378866208724
+  },
+  {
+    "epoca": 41,
+    "loss_train": 0.16829098016023636,
+    "val_dice_tejidos": 0.5905426375341233
+  },
+  {
+    "epoca": 42,
+    "loss_train": 0.168029023706913,
+    "val_dice_tejidos": 0.6138540621544695
+  },
+  {
+    "epoca": 43,
+    "loss_train": 0.16232635229825973,
+    "val_dice_tejidos": 0.5937148256941877
+  },
+  {
+    "epoca": 44,
+    "loss_train": 0.16058091819286346,
+    "val_dice_tejidos": 0.599619350189823
+  },
+  {
+    "epoca": 45,
+    "loss_train": 0.16232697144150735,
+    "val_dice_tejidos": 0.5900024401177615
+  },
+  {
+    "epoca": 46,
+    "loss_train": 0.16799269169569014,
+    "val_dice_tejidos": 0.6002131585931917
+  },
+  {
+    "epoca": 47,
+    "loss_train": 0.16905952244997025,
+    "val_dice_tejidos": 0.6052355279561612
+  },
+  {
+    "epoca": 48,
+    "loss_train": 0.16097807884216309,
+    "val_dice_tejidos": 0.6078654336479267
+  },
+  {
+    "epoca": 49,
+    "loss_train": 0.15716488361358644,
+    "val_dice_tejidos": 0.6006225277587202
+  },
+  {
+    "epoca": 50,
+    "loss_train": 0.15477328300476073,
+    "val_dice_tejidos": 0.6108897582408868
+  },
+  {
+    "epoca": 51,
+    "loss_train": 0.15327184945344924,
+    "val_dice_tejidos": 0.5998249624816162
+  },
+  {
+    "epoca": 52,
+    "loss_train": 0.14525391906499863,
+    "val_dice_tejidos": 0.5993512375917603
+  },
+  {
+    "epoca": 53,
+    "loss_train": 0.15136438682675363,
+    "val_dice_tejidos": 0.6024209622818056
+  },
+  {
+    "epoca": 54,
+    "loss_train": 0.1512701280415058,
+    "val_dice_tejidos": 0.6060377874959889
+  },
+  {
+    "epoca": 55,
+    "loss_train": 0.14659803807735444,
+    "val_dice_tejidos": 0.6200796096616952
+  },
+  {
+    "epoca": 56,
+    "loss_train": 0.14762781113386153,
+    "val_dice_tejidos": 0.6085062880277136
+  },
+  {
+    "epoca": 57,
+    "loss_train": 0.15267520397901535,
+    "val_dice_tejidos": 0.6161443498199114
+  },
+  {
+    "epoca": 58,
+    "loss_train": 0.14285080283880233,
+    "val_dice_tejidos": 0.5994732119079732
+  },
+  {
+    "epoca": 59,
+    "loss_train": 0.14912159591913224,
+    "val_dice_tejidos": 0.614539656873441
+  },
+  {
+    "epoca": 60,
+    "loss_train": 0.1440304309129715,
+    "val_dice_tejidos": 0.5824919170416866
+  },
+  {
+    "epoca": 61,
+    "loss_train": 0.14296500086784364,
+    "val_dice_tejidos": 0.6022699411170743
+  },
+  {
+    "epoca": 62,
+    "loss_train": 0.13882410079240798,
+    "val_dice_tejidos": 0.6138396226302094
+  },
+  {
+    "epoca": 63,
+    "loss_train": 0.14616427198052406,
+    "val_dice_tejidos": 0.5962279953130748
+  },
+  {
+    "epoca": 64,
+    "loss_train": 0.14423270598053933,
+    "val_dice_tejidos": 0.6199904224665701
+  },
+  {
+    "epoca": 65,
+    "loss_train": 0.13517760634422302,
+    "val_dice_tejidos": 0.6239719558932372
+  },
+  {
+    "epoca": 66,
+    "loss_train": 0.14128645956516267,
+    "val_dice_tejidos": 0.6138669475386002
+  },
+  {
+    "epoca": 67,
+    "loss_train": 0.1397514745593071,
+    "val_dice_tejidos": 0.6231816765949075
+  },
+  {
+    "epoca": 68,
+    "loss_train": 0.13885094597935677,
+    "val_dice_tejidos": 0.6110501710869127
+  },
+  {
+    "epoca": 69,
+    "loss_train": 0.13514260873198508,
+    "val_dice_tejidos": 0.6195893186931598
+  },
+  {
+    "epoca": 70,
+    "loss_train": 0.13993458896875383,
+    "val_dice_tejidos": 0.5980450543858038
+  },
+  {
+    "epoca": 71,
+    "loss_train": 0.13467939123511313,
+    "val_dice_tejidos": 0.6251804690611156
+  },
+  {
+    "epoca": 72,
+    "loss_train": 0.1377351090312004,
+    "val_dice_tejidos": 0.6145899260030491
+  },
+  {
+    "epoca": 73,
+    "loss_train": 0.1363379992544651,
+    "val_dice_tejidos": 0.6138862416277453
+  },
+  {
+    "epoca": 74,
+    "loss_train": 0.13390862196683884,
+    "val_dice_tejidos": 0.6075047370812051
+  },
+  {
+    "epoca": 75,
+    "loss_train": 0.13731931671500205,
+    "val_dice_tejidos": 0.6219495496844575
+  },
+  {
+    "epoca": 76,
+    "loss_train": 0.13904824256896972,
+    "val_dice_tejidos": 0.6193676524334959
+  },
+  {
+    "epoca": 77,
+    "loss_train": 0.13505107089877127,
+    "val_dice_tejidos": 0.6151639731183586
+  },
+  {
+    "epoca": 78,
+    "loss_train": 0.1367075853049755,
+    "val_dice_tejidos": 0.6269987940918207
+  },
+  {
+    "epoca": 79,
+    "loss_train": 0.1259035922586918,
+    "val_dice_tejidos": 0.6162790699318844
+  },
+  {
+    "epoca": 80,
+    "loss_train": 0.13514853566884993,
+    "val_dice_tejidos": 0.6192651871025664
+  },
+  {
+    "epoca": 81,
+    "loss_train": 0.13530101105570794,
+    "val_dice_tejidos": 0.6164249110773401
+  },
+  {
+    "epoca": 82,
+    "loss_train": 0.12693022415041924,
+    "val_dice_tejidos": 0.6362431143872933
+  },
+  {
+    "epoca": 83,
+    "loss_train": 0.12686819359660148,
+    "val_dice_tejidos": 0.6328445129365506
+  },
+  {
+    "epoca": 84,
+    "loss_train": 0.12807637006044387,
+    "val_dice_tejidos": 0.6317861001374323
+  },
+  {
+    "epoca": 85,
+    "loss_train": 0.1286298707127571,
+    "val_dice_tejidos": 0.6296980350569176
+  },
+  {
+    "epoca": 86,
+    "loss_train": 0.1259547546505928,
+    "val_dice_tejidos": 0.6089108897988987
+  },
+  {
+    "epoca": 87,
+    "loss_train": 0.12867928221821784,
+    "val_dice_tejidos": 0.6369653395969369
+  },
+  {
+    "epoca": 88,
+    "loss_train": 0.1284484013915062,
+    "val_dice_tejidos": 0.6188852887233359
+  },
+  {
+    "epoca": 89,
+    "loss_train": 0.12540136128664017,
+    "val_dice_tejidos": 0.6350068450117731
+  },
+  {
+    "epoca": 90,
+    "loss_train": 0.12609491646289825,
+    "val_dice_tejidos": 0.6020296228829721
+  },
+  {
+    "epoca": 91,
+    "loss_train": 0.12416589111089707,
+    "val_dice_tejidos": 0.6349879648095299
+  },
+  {
+    "epoca": 92,
+    "loss_train": 0.12391134649515152,
+    "val_dice_tejidos": 0.624882536820612
+  },
+  {
+    "epoca": 93,
+    "loss_train": 0.12058491334319114,
+    "val_dice_tejidos": 0.630332109209415
+  },
+  {
+    "epoca": 94,
+    "loss_train": 0.11320451945066452,
+    "val_dice_tejidos": 0.6234143913350892
+  },
+  {
+    "epoca": 95,
+    "loss_train": 0.12401072159409524,
+    "val_dice_tejidos": 0.6189523801879482
+  },
+  {
+    "epoca": 96,
+    "loss_train": 0.1194008857011795,
+    "val_dice_tejidos": 0.6244137915447535
+  },
+  {
+    "epoca": 97,
+    "loss_train": 0.1224728874862194,
+    "val_dice_tejidos": 0.6243152237960404
+  },
+  {
+    "epoca": 98,
+    "loss_train": 0.11727259308099747,
+    "val_dice_tejidos": 0.630021825955848
+  },
+  {
+    "epoca": 99,
+    "loss_train": 0.11989104375243187,
+    "val_dice_tejidos": 0.6256018839291679
+  },
+  {
+    "epoca": 100,
+    "loss_train": 0.12403487265110016,
+    "val_dice_tejidos": 0.6220360408811266
+  },
+  {
+    "epoca": 101,
+    "loss_train": 0.1190758302807808,
+    "val_dice_tejidos": 0.6264537024136378
+  },
+  {
+    "epoca": 102,
+    "loss_train": 0.11319804042577744,
+    "val_dice_tejidos": 0.6236772430401313
+  },
+  {
+    "epoca": 103,
+    "loss_train": 0.11562704890966416,
+    "val_dice_tejidos": 0.6241331957094586
+  },
+  {
+    "epoca": 104,
+    "loss_train": 0.11941767036914826,
+    "val_dice_tejidos": 0.6296908346966631
+  },
+  {
+    "epoca": 105,
+    "loss_train": 0.1127628043293953,
+    "val_dice_tejidos": 0.6284089862864318
+  },
+  {
+    "epoca": 106,
+    "loss_train": 0.1189883068203926,
+    "val_dice_tejidos": 0.6319151409831626
+  },
+  {
+    "epoca": 107,
+    "loss_train": 0.11070992350578308,
+    "val_dice_tejidos": 0.6231649312959912
+  },
+  {
+    "epoca": 108,
+    "loss_train": 0.1163184955716133,
+    "val_dice_tejidos": 0.6275927671536357
+  },
+  {
+    "epoca": 109,
+    "loss_train": 0.11337201669812202,
+    "val_dice_tejidos": 0.6248792741058393
+  },
+  {
+    "epoca": 110,
+    "loss_train": 0.1099537156522274,
+    "val_dice_tejidos": 0.6252506481484559
+  },
+  {
+    "epoca": 111,
+    "loss_train": 0.11461053565144538,
+    "val_dice_tejidos": 0.6284161130643797
+  },
+  {
+    "epoca": 112,
+    "loss_train": 0.10732975527644158,
+    "val_dice_tejidos": 0.6259795170624668
+  },
+  {
+    "epoca": 113,
+    "loss_train": 0.11051986366510391,
+    "val_dice_tejidos": 0.6276390101105864
+  },
+  {
+    "epoca": 114,
+    "loss_train": 0.11092978417873382,
+    "val_dice_tejidos": 0.6263785593770476
+  },
+  {
+    "epoca": 115,
+    "loss_train": 0.11356163918972015,
+    "val_dice_tejidos": 0.6265969365767975
+  },
+  {
+    "epoca": 116,
+    "loss_train": 0.10700833573937416,
+    "val_dice_tejidos": 0.6305154913554986
+  },
+  {
+    "epoca": 117,
+    "loss_train": 0.1082392655313015,
+    "val_dice_tejidos": 0.6294435315340933
+  },
+  {
+    "epoca": 118,
+    "loss_train": 0.10823473334312439,
+    "val_dice_tejidos": 0.6231281371461982
+  },
+  {
+    "epoca": 119,
+    "loss_train": 0.11176243424415588,
+    "val_dice_tejidos": 0.6202790508841731
+  },
+  {
+    "epoca": 120,
+    "loss_train": 0.10424487963318825,
+    "val_dice_tejidos": 0.6243398575629049
+  },
+  {
+    "epoca": 121,
+    "loss_train": 0.1093215711414814,
+    "val_dice_tejidos": 0.6208758948580706
+  },
+  {
+    "epoca": 122,
+    "loss_train": 0.11431009322404861,
+    "val_dice_tejidos": 0.6310624970421969
+  }
+]

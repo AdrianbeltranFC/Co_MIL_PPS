@@ -1,0 +1,73 @@
+{
+  "tarea": "segmentacion_semantica_tejidos",
+  "dataset": "DFUTissue (Padded, particion oficial 78/16/16)",
+  "arquitectura": "FPN + mobilenet_v2 (encoder ImageNet)",
+  "parametros_M": 4.216,
+  "clases": [
+    "Fondo",
+    "Fibrina",
+    "Granulación",
+    "Callo"
+  ],
+  "epocas_max": 150,
+  "epocas_corridas": 122,
+  "mejor_epoca": 87,
+  "batch": 8,
+  "lr": 0.0001,
+  "semilla": 42,
+  "dispositivo": "cpu",
+  "minutos_entrenamiento": 45.9,
+  "val": {
+    "dice_por_clase": {
+      "Fondo": 0.9861679212553712,
+      "Fibrina": 0.63927090154988,
+      "Granulación": 0.709377715393356,
+      "Callo": 0.562247401847575
+    },
+    "iou_por_clase": {
+      "Fondo": 0.9727132746445423,
+      "Fibrina": 0.46980027271998076,
+      "Granulación": 0.5496400642187581,
+      "Callo": 0.39105991014732827
+    },
+    "clase_presente_en_gt": {
+      "Fondo": true,
+      "Fibrina": true,
+      "Granulación": true,
+      "Callo": true
+    },
+    "dice_medio_tejidos": 0.6369653395969369,
+    "iou_medio_tejidos": 0.470166749028689,
+    "dice_medio_por_imagen": 0.41634609812399437,
+    "dice_std_por_imagen": 0.21348226764831552
+  },
+  "test": {
+    "dice_por_clase": {
+      "Fondo": 0.9847632803841503,
+      "Fibrina": 0.45528771384136857,
+      "Granulación": 0.8735309874727855,
+      "Callo": 0.7119709399616342
+    },
+    "iou_por_clase": {
+      "Fondo": 0.9699839075528808,
+      "Fibrina": 0.29473949156808454,
+      "Granulación": 0.7754594025742735,
+      "Callo": 0.552759997464985
+    },
+    "clase_presente_en_gt": {
+      "Fondo": true,
+      "Fibrina": true,
+      "Granulación": true,
+      "Callo": true
+    },
+    "dice_medio_tejidos": 0.6802632137585961,
+    "iou_medio_tejidos": 0.5409862972024476,
+    "dice_medio_por_imagen": 0.5784258601786885,
+    "dice_std_por_imagen": 0.1580855926808404
+  },
+  "referencias_magnitud": {
+    "DFUTissue_Unet_MiT-b3": "Dice medio ~0.85",
+    "Kabir2025_FPN_VGG16_LOOCV": "Dice ~0.82"
+  },
+  "guardado_en": "2026-09-02T14:17:15.700577"
+}
