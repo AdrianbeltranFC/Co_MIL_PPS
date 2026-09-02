@@ -11,6 +11,7 @@ Ejecución: python CO-MIL/reprocesador_dataset.py
 
 import os
 import math
+from typing import Optional
 import torch
 import torchvision.transforms as transforms
 from PIL import Image
@@ -72,64 +73,144 @@ def smart_expansion_headless(original_img, bbox, patch_size):
     }
     return patches, spatial_metadata
 
-def ejecutar_reprocesamiento():
-    root = tk.Tk()
-    root.withdraw()
-    root.attributes('-topmost', True) 
-    
-    messagebox.showinfo("Reprocesador Dataset", "Selecciona la carpeta que contiene los archivos .pt originales (Ej. la carpeta 224px).")
-    input_folder = filedialog.askdirectory(title="Carpeta de origen (.pt de 224px)")
-    if not input_folder: return
-    
+def _resolver_ruta_imagen(ruta_guardada: str, dataset_root: Optional[str]) -> Optional[str]:
+    """La ruta a la foto original se guarda ABSOLUTA en el momento de anotar.
+    Si el proyecto se movió o renombró desde entonces (pasó de verdad: rutas
+    con 'Desktop/Adrián Emiliano...' de una ubicación vieja del proyecto), esa
+    ruta ya no existe aunque la foto sí. Se intenta primero la ruta guardada
+    tal cual, y si no existe, se busca el mismo nombre de archivo dentro de
+    `dataset_root` (la carpeta de imágenes actual)."""
+    if os.path.exists(ruta_guardada):
+        return ruta_guardada
+    if dataset_root:
+        candidato = os.path.join(dataset_root, os.path.basename(ruta_guardada))
+        if os.path.exists(candidato):
+            return candidato
+    return None
+
+
+def reprocesar_carpeta(input_folder: str, target_size: int, output_folder: str = None,
+                        dataset_root: Optional[str] = None) -> str:
+    """Lógica pura de reprocesamiento (sin GUI): reextrae todas las bolsas .pt de
+    `input_folder` a `target_size` px desde la imagen original en alta resolución.
+
+    Preserva 'roi_labels' (y 'label_source', y el anotador original) en las
+    bolsas reprocesadas -- sin esto, dataset.py no podría reconstruir el vector
+    Y dinámicamente (ver catalogo_tejidos.py) para las bolsas de otra
+    resolución, y perderían la protección contra el catálogo de clases
+    fragmentado que sí tienen las bolsas de 224px.
+
+    `dataset_root`: carpeta donde viven hoy las fotos .jpg originales, usada
+    como respaldo si la ruta absoluta guardada en la bolsa (de cuando se
+    anotó) ya no existe. Si no se indica, se asume dos niveles arriba de
+    `input_folder` (ej. input_folder=".../Dataset_Experto_100/Bolsas_MIL_Procesadas/224px"
+    -> dataset_root=".../Dataset_Experto_100").
+    """
     pt_files = [f for f in os.listdir(input_folder) if f.endswith('.pt')]
     if not pt_files:
-        messagebox.showerror("Error", "No se encontraron archivos .pt en la carpeta seleccionada.")
-        return
+        raise FileNotFoundError(f"No se encontraron archivos .pt en {input_folder}")
 
-    target_size = simpledialog.askinteger("Resolución Objetivo", "Ingresa el nuevo tamaño del parche en píxeles (ej. 56, 112):", minvalue=16, maxvalue=224)
-    if not target_size: return
+    if dataset_root is None:
+        dataset_root = os.path.dirname(os.path.dirname(input_folder))
 
-    base_dir = os.path.dirname(input_folder)
-    output_folder = os.path.join(base_dir, f"{target_size}px")
+    if output_folder is None:
+        base_dir = os.path.dirname(input_folder)
+        output_folder = os.path.join(base_dir, f"{target_size}px")
     os.makedirs(output_folder, exist_ok=True)
-    
+
     print(f"\n--- INICIANDO REPROCESAMIENTO MASIVO A {target_size}x{target_size} px ---")
-    
+    print(f"    (respaldo de fotos originales: {dataset_root})")
+
     procesados = 0
+    reubicados = 0
     for file_name in pt_files:
         input_path = os.path.join(input_folder, file_name)
-        data = torch.load(input_path)
-        
+        data = torch.load(input_path, weights_only=False)
+
         try:
-            img_path = data['original_file']
+            img_path_guardada = data['original_file']
             user_bbox = data['spatial_metadata']['user_bbox']
             vector_Y = data['Y']
             class_names = data['class_names']
-            
+
+            img_path = _resolver_ruta_imagen(img_path_guardada, dataset_root)
+            if img_path is None:
+                raise FileNotFoundError(img_path_guardada)
+            if img_path != img_path_guardada:
+                reubicados += 1
+
             # --- SE VUELVE A ABRIR LA FOTOGRAFÍA ORIGINAL DE ALTA RESOLUCIÓN ---
             img = Image.open(img_path).convert('RGB')
-            
+
             bolsa_X, new_spatial_meta = smart_expansion_headless(img, user_bbox, target_size)
-            
+
+            # Preservar proveniencia (anotador, índice de ROI) del metadato original
+            meta_original = data.get('spatial_metadata', {}) or {}
+            if meta_original.get('annotator'):
+                new_spatial_meta['annotator'] = meta_original['annotator']
+            if 'roi_index' in meta_original:
+                new_spatial_meta['roi_index'] = meta_original['roi_index']
+            if 'roi_total' in meta_original:
+                new_spatial_meta['roi_total'] = meta_original['roi_total']
+
             out_path = os.path.join(output_folder, file_name)
             torch.save({
                 'X': bolsa_X,
-                'Y': vector_Y,              
+                'Y': vector_Y,
                 'class_names': class_names,
-                'spatial_metadata': new_spatial_meta, 
-                'original_file': img_path 
+                'spatial_metadata': new_spatial_meta,
+                'original_file': img_path,
+                'roi_labels': data.get('roi_labels', []),
+                'label_source': data.get('label_source'),
             }, out_path)
-            
+
             procesados += 1
             print(f"[{procesados}/{len(pt_files)}] Procesado: {file_name} -> Grid: {new_spatial_meta['grid_shape']} (N={bolsa_X.shape[0]})")
-            
+
         except KeyError as e:
             print(f"[!] Omitiendo {file_name}: Faltan metadatos originales ({e}). Se requiere procesar con el nuevo generador_bolsas.py")
-        except FileNotFoundError:
-            print(f"[!] Omitiendo {file_name}: No se encuentra la foto original ({data.get('original_file')}).")
+        except FileNotFoundError as e:
+            print(f"[!] Omitiendo {file_name}: No se encuentra la foto original ni en la ruta guardada "
+                  f"({e}) ni en {dataset_root}.")
 
-    messagebox.showinfo("Éxito", f"Reprocesamiento completado.\nSe generaron {procesados} bolsas en:\n{output_folder}")
-    print("\nPROCESO TERMINADO.")
+    print(f"\nPROCESO TERMINADO. {procesados}/{len(pt_files)} bolsas reprocesadas en: {output_folder}")
+    if reubicados:
+        print(f"    ({reubicados} de ellas usaron la foto encontrada en {dataset_root} porque la ruta "
+              f"guardada originalmente ya no existía)")
+    return output_folder
+
+
+def ejecutar_reprocesamiento():
+    """Versión interactiva (GUI): pide carpeta de origen y tamaño con diálogos."""
+    root = tk.Tk()
+    root.withdraw()
+    root.attributes('-topmost', True)
+
+    messagebox.showinfo("Reprocesador Dataset", "Selecciona la carpeta que contiene los archivos .pt originales (Ej. la carpeta 224px).")
+    input_folder = filedialog.askdirectory(title="Carpeta de origen (.pt de 224px)")
+    if not input_folder:
+        return
+
+    target_size = simpledialog.askinteger("Resolución Objetivo", "Ingresa el nuevo tamaño del parche en píxeles (ej. 56, 112):", minvalue=16, maxvalue=224)
+    if not target_size:
+        return
+
+    try:
+        output_folder = reprocesar_carpeta(input_folder, target_size)
+        messagebox.showinfo("Éxito", f"Reprocesamiento completado.\nBolsas guardadas en:\n{output_folder}")
+    except FileNotFoundError as e:
+        messagebox.showerror("Error", str(e))
+
 
 if __name__ == "__main__":
-    ejecutar_reprocesamiento()
+    import argparse
+    parser = argparse.ArgumentParser(description="Reprocesador masivo de bolsas Co-MIL a otra resolución de parche")
+    parser.add_argument("--entrada", default=None, help="Carpeta con las bolsas .pt originales (si se omite, se abre selector gráfico)")
+    parser.add_argument("--tamano", type=int, default=None, help="Nuevo tamaño de parche en px (si se omite, se pide con diálogo)")
+    parser.add_argument("--salida", default=None, help="Carpeta de salida (default: <tamano>px junto a la carpeta de entrada)")
+    args = parser.parse_args()
+
+    if args.entrada and args.tamano:
+        reprocesar_carpeta(args.entrada, args.tamano, args.salida)
+    else:
+        ejecutar_reprocesamiento()

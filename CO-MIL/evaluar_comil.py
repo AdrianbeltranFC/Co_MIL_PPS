@@ -18,6 +18,7 @@ Requiere haber corrido antes:
 =========================================================================================
 """
 
+import glob
 import math
 import os
 import sys
@@ -39,8 +40,12 @@ if _DIRECTORIO_ACTUAL not in sys.path:
     sys.path.append(_DIRECTORIO_ACTUAL)
 
 from dataset import CoMILDataset
+from dataset_cam import CoMILDatasetCAM
 from Models.attention_mil import CoMILNetwork
+from Models.attention_mil_cam import CoMILNetworkCAM
 from torchmil.data import collate_fn
+import catalogo_tejidos
+import experimentos
 
 
 def calcular_sensibilidad_especificidad(y_true_col: np.ndarray, y_pred_col: np.ndarray):
@@ -57,24 +62,49 @@ def calcular_sensibilidad_especificidad(y_true_col: np.ndarray, y_pred_col: np.n
     return sensibilidad, especificidad
 
 
-def evaluar_modelo_miml(split: str = "test"):
+def evaluar_modelo_miml(split: str = "test", ruta_experimento: str = None):
     # --- CONFIGURACIÓN ---
     RAIZ_REPO = os.path.dirname(_DIRECTORIO_ACTUAL)
-    RUTA_PESOS = os.path.join(RAIZ_REPO, "Pesos_Entrenados", "comil_miml_fase1.pth")
+    RUTA_PESOS_DIR = os.path.join(RAIZ_REPO, "Pesos_Entrenados")
     UMBRAL = 0.5  # Sensibilidad del diagnóstico clínico
 
     dispositivo = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-    # 1. CARGA DEL DICCIONARIO DE ENTRENAMIENTO
-    if not os.path.exists(RUTA_PESOS):
-        print(f"[!] Error: No se encontraron los pesos en {RUTA_PESOS}. Entrena primero con entrenar_comil.py.")
+    # Por default se evalúa el experimento más reciente; se puede apuntar a uno
+    # viejo explícitamente (--experimento exp_20260822_172100) para reproducir
+    # resultados de una corrida anterior sin mezclarlo con la más nueva.
+    if ruta_experimento is None:
+        ruta_experimento = experimentos.experimento_mas_reciente(RUTA_PESOS_DIR)
+    elif not os.path.isabs(ruta_experimento):
+        ruta_experimento = os.path.join(RUTA_PESOS_DIR, ruta_experimento)
+
+    if not ruta_experimento or not os.path.isdir(ruta_experimento):
+        print(f"[!] No se encontró ningún experimento en {RUTA_PESOS_DIR}. Entrena primero con entrenar_comil.py.")
         return
 
+    RUTA_PESOS = os.path.join(ruta_experimento, "modelo.pth")
+    if not os.path.exists(RUTA_PESOS):
+        print(f"[!] Error: no se encontraron pesos en {RUTA_PESOS}.")
+        return
+
+    meta_experimento = experimentos.cargar_metadata(ruta_experimento)
+    info_patch = meta_experimento.get("patch_size", {})
+    print(f"[+] Experimento: {os.path.basename(ruta_experimento)}")
+    if info_patch:
+        print(f"    -> Resolución de parche: {info_patch.get('patch_sizes_encontrados')} px "
+              f"({'MEZCLA DE RESOLUCIONES -- revisar' if info_patch.get('mezcla_de_resoluciones') else 'consistente'}), "
+              f"{info_patch.get('parches_por_bolsa_min')}-{info_patch.get('parches_por_bolsa_max')} parches por bolsa")
+
+    # 1. CARGA DEL DICCIONARIO DE ENTRENAMIENTO
     checkpoint = torch.load(RUTA_PESOS, map_location=dispositivo)
     num_classes = checkpoint["num_classes"]
     class_names = checkpoint["class_names"]
     ruta_bolsas = checkpoint.get("ruta_bolsas")
     ruta_manifest = checkpoint.get("ruta_manifest")
+    # Un checkpoint de entrenar_comil_cam.py guarda "arquitectura": "cam" -- con eso
+    # basta para que este mismo script sirva para las dos arquitecturas sin
+    # necesitar una bandera manual ni un script aparte que se pueda desincronizar.
+    es_cam = checkpoint.get("arquitectura") == "cam"
 
     if not ruta_bolsas or not ruta_manifest:
         print("[!] Este checkpoint fue entrenado con una versión anterior del script (sin rutas "
@@ -82,26 +112,71 @@ def evaluar_modelo_miml(split: str = "test"):
               "poder evaluar sobre un split real.")
         return
 
+    if es_cam:
+        print("    -> Arquitectura: estilo CAM (1 forward pass por ROI completo; instancias = "
+              "celdas del mapa de features nativo, no parches recortados a mano)")
+
     # 2. INSTANCIACIÓN DE LA ARQUITECTURA
-    modelo = CoMILNetwork(num_classes=num_classes).to(dispositivo)
+    if es_cam:
+        modelo = CoMILNetworkCAM(num_classes=num_classes).to(dispositivo)
+    else:
+        modelo = CoMILNetwork(num_classes=num_classes).to(dispositivo)
     modelo.load_state_dict(checkpoint["model_state_dict"])
     modelo.eval()
 
     # 3. CARGA DE DATOS — SOLO el split indicado (test por defecto), nunca el de
     # entrenamiento. Sin aumento de datos: se quiere medir desempeño real.
     try:
-        dataset = CoMILDataset(
-            pt_folder=ruta_bolsas,
-            target_size=224,
-            manifest_path=ruta_manifest,
-            split=split,
-            augment=False,
-        )
+        if es_cam:
+            dataset = CoMILDatasetCAM(
+                pt_folder=ruta_bolsas,
+                manifest_path=ruta_manifest,
+                split=split,
+            )
+        else:
+            dataset = CoMILDataset(
+                pt_folder=ruta_bolsas,
+                target_size=224,
+                manifest_path=ruta_manifest,
+                split=split,
+                augment=False,
+            )
     except (FileNotFoundError, ValueError) as e:
         print(f"[!] Error: {e}")
         return
 
-    dataloader = DataLoader(dataset, batch_size=4, shuffle=False, collate_fn=collate_fn)
+    # Auditoría de etiquetas: si el catálogo se vuelve a fragmentar (una
+    # etiqueta cruda que ya no matchea nada del catálogo vigente), dataset.py
+    # la ignora en silencio y una clase puede parecer "sin ejemplos" sin
+    # serlo -- exactamente el bug de antes de la Etapa 0. Se avisa aquí en
+    # vez de dejarlo para que alguien lo note manualmente en los resultados.
+    problemas_etiquetas = catalogo_tejidos.auditar_etiquetas_no_reconocidas(
+        ruta_bolsas, dataset.class_catalog, dataset.renombres
+    )
+    if problemas_etiquetas:
+        print(f"\n[!] ALERTA: {len(problemas_etiquetas)} bolsa(s) con etiquetas que no matchean "
+              "el catálogo vigente (se están ignorando en silencio, pueden estar deflactando "
+              "el conteo de alguna clase):")
+        for archivo, etiquetas in list(problemas_etiquetas.items())[:10]:
+            print(f"    {archivo}: {etiquetas}")
+        if len(problemas_etiquetas) > 10:
+            print(f"    ... y {len(problemas_etiquetas) - 10} más.")
+
+    # Conteo de positivos por clase en TODO el dataset (no solo este split),
+    # para poder distinguir "esta clase es rara de verdad" de "este split en
+    # particular tuvo mala suerte" al leer el reporte de abajo.
+    conteo_global = catalogo_tejidos.contar_positivos_por_clase(
+        ruta_bolsas, dataset.class_catalog, dataset.renombres
+    )
+    total_bolsas_dataset = len(glob.glob(os.path.join(ruta_bolsas, "*.pt")))
+
+    # El estilo CAM entrena y evalúa una bolsa a la vez (batch_size=1, sin
+    # collate_fn) porque cada ROI reconstruido tiene un tamaño físico distinto y no
+    # se puede empaquetar en un lote parejo como los parches de tamaño uniforme.
+    if es_cam:
+        dataloader = DataLoader(dataset, batch_size=1, shuffle=False)
+    else:
+        dataloader = DataLoader(dataset, batch_size=4, shuffle=False, collate_fn=collate_fn)
 
     y_true = []
     y_pred_logits = []
@@ -110,10 +185,15 @@ def evaluar_modelo_miml(split: str = "test"):
 
     with torch.no_grad():
         for batch in tqdm(dataloader):
-            batch_Y = batch["Y"]
-            batch = batch.to(dispositivo)
-            batch_X, mask = batch["X"], batch["mask"].bool()
-            logits, _ = modelo(batch_X, mask)
+            if es_cam:
+                imagen = batch["imagen"][0].to(dispositivo)
+                batch_Y = batch["Y"]
+                logits, _, _ = modelo(imagen)
+            else:
+                batch_Y = batch["Y"]
+                batch = batch.to(dispositivo)
+                batch_X, mask = batch["X"], batch["mask"].bool()
+                logits, _ = modelo(batch_X, mask)
 
             y_true.append(batch_Y.numpy())
             y_pred_logits.append(torch.sigmoid(logits).cpu().numpy())
@@ -134,6 +214,8 @@ def evaluar_modelo_miml(split: str = "test"):
 
     print("\n--- Sensibilidad, Especificidad y AUC-ROC por Tejido ---")
     print("(N/D = no definido: el split de evaluación no tiene ejemplos positivos Y negativos de esa clase)")
+    print("(dataset=positivos en TODO el dataset, no solo este split -- distingue 'clase rara de verdad' de "
+          "'mala suerte en el split'; ver catalogo_tejidos.contar_positivos_por_clase)")
     for i, nombre in enumerate(class_names):
         col_true = y_true[:, i]
         col_pred = y_pred_bin[:, i]
@@ -142,6 +224,7 @@ def evaluar_modelo_miml(split: str = "test"):
         sens, esp = calcular_sensibilidad_especificidad(col_true, col_pred)
         n_pos = int(col_true.sum())
         n_neg = int(len(col_true) - n_pos)
+        n_pos_dataset = conteo_global.get(nombre)
 
         if n_pos > 0 and n_neg > 0:
             auc = roc_auc_score(col_true, col_prob)
@@ -151,8 +234,9 @@ def evaluar_modelo_miml(split: str = "test"):
 
         sens_str = f"{sens:.3f}" if not np.isnan(sens) else "N/D"
         esp_str = f"{esp:.3f}" if not np.isnan(esp) else "N/D"
+        dataset_str = f"{n_pos_dataset:3d}/{total_bolsas_dataset}" if n_pos_dataset is not None else "N/D"
 
-        print(f"  {nombre:35s} | positivos={n_pos:2d}/{len(col_true):2d} | "
+        print(f"  {nombre:35s} | positivos={n_pos:2d}/{len(col_true):2d} (dataset={dataset_str}) | "
               f"sensibilidad={sens_str:>5s} | especificidad={esp_str:>5s} | AUC-ROC={auc_str:>5s}")
 
     # --- VISUALIZACIÓN 1: MATRICES DE CONFUSIÓN MULTIETIQUETA ---
@@ -176,10 +260,21 @@ def evaluar_modelo_miml(split: str = "test"):
     for i in range(num_classes, len(axes_list)):
         axes_list[i].axis("off")
 
-    fig.suptitle(f"Matrices de confusión por tejido — split '{split}' ({len(dataset)} bolsas)", fontsize=13)
-    plt.tight_layout(rect=[0, 0, 1, 0.97])
+    if es_cam:
+        subtitulo_patch = "estilo CAM (instancias = mapa de features nativo, no parches recortados)"
+    else:
+        patch_sizes = info_patch.get("patch_sizes_encontrados") if info_patch else None
+        subtitulo_patch = f"parche {patch_sizes} px" if patch_sizes else "resolución de parche desconocida"
+    fig.suptitle(
+        f"Matrices de confusión por tejido — split '{split}' ({len(dataset)} bolsas)\n"
+        f"{os.path.basename(ruta_experimento)} · {subtitulo_patch}",
+        fontsize=12,
+    )
+    plt.tight_layout(rect=[0, 0, 1, 0.95])
 
-    ruta_figura = os.path.join(RAIZ_REPO, "Pesos_Entrenados", f"matrices_confusion_{split}.png")
+    # Se guarda DENTRO de la carpeta del experimento, no en Pesos_Entrenados/ a
+    # secas -- así nunca se mezcla con la figura de otra corrida.
+    ruta_figura = os.path.join(ruta_experimento, f"matrices_confusion_{split}.png")
     plt.savefig(ruta_figura, dpi=150)
     print(f"\n[+] Matrices de confusión guardadas en: {ruta_figura}")
 
@@ -187,5 +282,10 @@ def evaluar_modelo_miml(split: str = "test"):
 
 
 if __name__ == "__main__":
-    split_a_evaluar = sys.argv[1] if len(sys.argv) > 1 else "test"
-    evaluar_modelo_miml(split=split_a_evaluar)
+    import argparse
+    parser = argparse.ArgumentParser(description="Evaluacion Co-MIL sobre un split de datos")
+    parser.add_argument("split", nargs="?", default="test", choices=["train", "val", "test"])
+    parser.add_argument("--experimento", default=None,
+                         help="Nombre o ruta de la carpeta de experimento a evaluar (default: el mas reciente)")
+    args = parser.parse_args()
+    evaluar_modelo_miml(split=args.split, ruta_experimento=args.experimento)

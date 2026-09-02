@@ -46,6 +46,7 @@ ouuuyeah
 
 """
 
+import json
 import os
 import sys
 import torch
@@ -61,9 +62,11 @@ if directorio_actual not in sys.path:
 
 from dataset import CoMILDataset
 from Models.attention_mil import CoMILNetwork
+import catalogo_tejidos
+import experimentos
 
 # Importación estandarizada para manejo de tensores asimétricos
-from torchmil.data import collate_fn 
+from torchmil.data import collate_fn
 
 # =======================================================================================
 # 1. FUNCIONES DE APOYO Y MITIGACIÓN DE SESGO
@@ -106,14 +109,17 @@ def congelar_backbone(modelo: nn.Module):
 # 2. MOTOR PRINCIPAL DE ENTRENAMIENTO
 # =======================================================================================
 
-def entrenar_modelo():
+def entrenar_modelo(carpeta_parche: str = "224px", etiqueta_experimento: str = None):
     # --- HIPERPARÁMETROS DE LA FASE 1 ---
     # Ruta absoluta por defecto para poder correr el script igual desde la raíz del
     # repo o subiéndolo a Google Drive/Colab (ver notas al inicio del archivo).
     # Ajusta RUTA_DATASET_ROOT si trabajas con otro lote (Dataset_Adrian_100, etc.).
+    # `carpeta_parche` selecciona la resolución de parche (224px/112px/56px, ver
+    # reprocesador_dataset.py) -- el manifiesto de splits es el mismo para todas
+    # porque la partición train/val/test es por IMAGEN, no por resolución.
     RAIZ_REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     RUTA_DATASET_ROOT = os.path.join(RAIZ_REPO, "APP_generador_bolsas", "Dataset_Experto_100")
-    RUTA_BOLSAS = os.path.join(RUTA_DATASET_ROOT, "Bolsas_MIL_Procesadas", "224px")
+    RUTA_BOLSAS = os.path.join(RUTA_DATASET_ROOT, "Bolsas_MIL_Procesadas", carpeta_parche)
     RUTA_MANIFEST = os.path.join(RUTA_DATASET_ROOT, "Bolsas_MIL_Procesadas", "splits_manifest.json")
     RUTA_PESOS_DIR = os.path.join(RAIZ_REPO, "Pesos_Entrenados")
     EPOCHS = 30
@@ -142,6 +148,22 @@ def entrenar_modelo():
     except (FileNotFoundError, ValueError) as e:
         print(f"[!] Error: {e}")
         return
+
+    # Auditoría de etiquetas: si el catálogo se vuelve a fragmentar (etiqueta
+    # cruda que ya no matchea el catálogo vigente), dataset.py la ignora en
+    # silencio y una clase puede parecer "sin ejemplos" sin serlo -- el bug
+    # que motivó la Etapa 0. Se revisa TODA la carpeta de bolsas (no solo el
+    # split de train) para detectar cualquier fragmentación nueva de una vez.
+    problemas_etiquetas = catalogo_tejidos.auditar_etiquetas_no_reconocidas(
+        RUTA_BOLSAS, dataset.class_catalog, dataset.renombres
+    )
+    if problemas_etiquetas:
+        print(f"\n[!] ALERTA: {len(problemas_etiquetas)} bolsa(s) con etiquetas que no matchean "
+              "el catálogo vigente (se están ignorando en silencio):")
+        for archivo, etiquetas in list(problemas_etiquetas.items())[:10]:
+            print(f"    {archivo}: {etiquetas}")
+        if len(problemas_etiquetas) > 10:
+            print(f"    ... y {len(problemas_etiquetas) - 10} más.")
 
     print(f"-> Entrenando sobre el split 'train': {len(dataset)} bolsas (con aumento de datos activo).")
     dataloader = DataLoader(dataset, batch_size=BATCH_SIZE, shuffle=True, collate_fn=collate_fn)
@@ -208,10 +230,14 @@ def entrenar_modelo():
         print(f" -> Fin Época {epoch+1:02d} | Loss Promedio: {loss_promedio:.4f}")
         
     print("\n=== ENTRENAMIENTO FASE 1 FINALIZADO CON ÉXITO ===")
-    
-    # --- GUARDADO ESTRUCTURADO ---
+
+    # --- GUARDADO ESTRUCTURADO: cada corrida en su propia carpeta con fecha ---
+    # Antes se sobrescribía siempre el mismo comil_miml_fase1.pth, así que un
+    # modelo nuevo borraba en silencio cualquier rastro del anterior y no había
+    # forma de saber, mirando una figura de resultados, de qué corrida venía.
     os.makedirs(RUTA_PESOS_DIR, exist_ok=True)
-    ruta_modelo = os.path.join(RUTA_PESOS_DIR, "comil_miml_fase1.pth")
+    ruta_experimento = experimentos.crear_carpeta_experimento(RUTA_PESOS_DIR, etiqueta=etiqueta_experimento)
+    ruta_modelo = os.path.join(ruta_experimento, "modelo.pth")
 
     # Guardamos los pesos y la configuración clave para no perderla en la Fase 2.
     # Se incluyen las rutas de dataset/manifiesto usadas para entrenar, para que
@@ -225,10 +251,46 @@ def entrenar_modelo():
         'class_names': meta_info['class_names'],
         'ruta_bolsas': RUTA_BOLSAS,
         'ruta_manifest': RUTA_MANIFEST,
+        'ruta_experimento': ruta_experimento,
     }, ruta_modelo)
-    
-    print(f"[+] Diccionario del modelo guardado en: {ruta_modelo}")
+
+    # Metadata legible para humanos: responde "de qué experimento es esto" sin
+    # tener que abrir el .pth. Incluye la resolución de parche realmente usada
+    # (escaneada de las bolsas, no asumida) y el desglose del split.
+    info_patch_size = experimentos.resumen_patch_size(RUTA_BOLSAS)
+    with open(RUTA_MANIFEST, "r", encoding="utf-8") as f:
+        manifiesto = json.load(f)
+    conteo_imagenes_por_split = {}
+    for info in manifiesto.get("imagenes", {}).values():
+        conteo_imagenes_por_split[info["split"]] = conteo_imagenes_por_split.get(info["split"], 0) + 1
+
+    experimentos.guardar_metadata(ruta_experimento, {
+        "epochs": EPOCHS,
+        "batch_size": BATCH_SIZE,
+        "learning_rate": LEARNING_RATE,
+        "loss_final": historial_loss[-1],
+        "num_classes": num_tejidos,
+        "class_names": meta_info["class_names"],
+        "ruta_bolsas": RUTA_BOLSAS,
+        "ruta_manifest": RUTA_MANIFEST,
+        "bolsas_entrenamiento": len(dataset),
+        "imagenes_por_split": conteo_imagenes_por_split,
+        "patch_size": info_patch_size,
+        "dispositivo": dispositivo.type,
+    })
+    experimentos.marcar_como_mas_reciente(RUTA_PESOS_DIR, ruta_experimento)
+
+    print(f"[+] Experimento guardado en: {ruta_experimento}")
+    print(f"    -> Modelo: {ruta_modelo}")
+    print(f"    -> Metadata: {os.path.join(ruta_experimento, 'metadata.json')}")
     print("[+] Listo para la Fase 2 (Evaluación con Hamming Loss y Precisión).")
 
 if __name__ == "__main__":
-    entrenar_modelo()
+    import argparse
+    parser = argparse.ArgumentParser(description="Entrenamiento Co-MIL (Fase 1)")
+    parser.add_argument("--parche", default="224px", help="Carpeta de resolución de parche a usar (ej. 224px, 112px)")
+    parser.add_argument("--etiqueta", default=None, help="Etiqueta para la carpeta del experimento (ej. 112px). Si se omite, se usa --parche")
+    args = parser.parse_args()
+
+    etiqueta = args.etiqueta if args.etiqueta else args.parche
+    entrenar_modelo(carpeta_parche=args.parche, etiqueta_experimento=etiqueta)

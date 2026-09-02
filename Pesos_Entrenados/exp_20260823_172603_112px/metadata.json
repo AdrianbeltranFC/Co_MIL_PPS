@@ -1,0 +1,40 @@
+{
+  "epochs": 30,
+  "batch_size": 8,
+  "learning_rate": 0.0001,
+  "loss_final": 0.9112221726349422,
+  "num_classes": 12,
+  "class_names": [
+    "Tejido de Granulación",
+    "Fibrina (Esfacelo)",
+    "Tejido Necrótico (Escara)",
+    "Tejido Calloso (Hiperqueratosis)",
+    "Exudado",
+    "Epitelización",
+    "Hueso Expuesto",
+    "Tendón / Músculo Expuesto",
+    "Piel Perilesional Sana",
+    "Maceración / Eritema",
+    "Hiperpigmentación",
+    "Hipergranulación"
+  ],
+  "ruta_bolsas": "C:\\Users\\Becario\\Personal_Adrian\\Co_MIL_PPS\\APP_generador_bolsas\\Dataset_Experto_100\\Bolsas_MIL_Procesadas\\112px",
+  "ruta_manifest": "C:\\Users\\Becario\\Personal_Adrian\\Co_MIL_PPS\\APP_generador_bolsas\\Dataset_Experto_100\\Bolsas_MIL_Procesadas\\splits_manifest.json",
+  "bolsas_entrenamiento": 106,
+  "imagenes_por_split": {
+    "train": 36,
+    "test": 11,
+    "val": 11
+  },
+  "patch_size": {
+    "total_bolsas": 200,
+    "patch_sizes_encontrados": [
+      112
+    ],
+    "mezcla_de_resoluciones": false,
+    "parches_por_bolsa_min": 1,
+    "parches_por_bolsa_max": 192
+  },
+  "dispositivo": "cpu",
+  "guardado_en": "2026-08-23T17:26:04.353135"
+}

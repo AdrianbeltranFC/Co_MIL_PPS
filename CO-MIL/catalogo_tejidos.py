@@ -18,6 +18,7 @@ haya cambiado el catálogo entre sesiones.
 =========================================================================================
 """
 
+import glob
 import json
 import os
 import unicodedata
@@ -191,6 +192,61 @@ def etiquetas_no_reconocidas(
     """Utilidad de diagnóstico: cuáles etiquetas crudas de una bolsa no se
     pudieron resolver contra el catálogo vigente (posible typo o basura)."""
     return [e for e in etiquetas_crudas if resolver_nombre_canonico(e, catalogo_vigente, renombres) is None]
+
+
+def auditar_etiquetas_no_reconocidas(
+    pt_folder: str, catalogo_vigente: List[str], renombres: Dict[str, str]
+) -> Dict[str, List[str]]:
+    """Escanea TODAS las bolsas .pt de una carpeta y devuelve, por archivo, las
+    etiquetas crudas que no se pudieron resolver contra el catálogo vigente
+    (diccionario vacío = todo bien).
+
+    Por qué existe: antes de la Etapa 0 (2026-08-21), el catálogo de clases se
+    fragmentaba en silencio -- una bolsa con una etiqueta cruda que ya no
+    coincidía con el catálogo simplemente se ignoraba dentro de
+    vectorizar_etiquetas(), y esa clase parecía tener menos ejemplos de los
+    que en realidad tiene (o incluso 0). El fix de catalogo_tejidos.py resolvió
+    el problema, pero como el catálogo puede seguir creciendo/renombrándose en
+    sesiones futuras de anotación, esta auditoría debe correr SIEMPRE al
+    inicio de entrenar_comil.py y evaluar_comil.py (no a mano, no solo cuando
+    alguien sospecha algo raro) para que una fragmentación nueva se detecte
+    de inmediato en vez de disfrazarse de "esta clase es rara"."""
+    problemas: Dict[str, List[str]] = {}
+    for ruta in glob.glob(os.path.join(pt_folder, "*.pt")):
+        data = torch.load(ruta, map_location="cpu", weights_only=False)
+        crudas = data.get("roi_labels")
+        if not crudas:
+            continue
+        no_reconocidas = etiquetas_no_reconocidas(crudas, catalogo_vigente, renombres)
+        if no_reconocidas:
+            problemas[os.path.basename(ruta)] = no_reconocidas
+    return problemas
+
+
+def contar_positivos_por_clase(
+    pt_folder: str, catalogo_vigente: List[str], renombres: Dict[str, str]
+) -> Dict[str, int]:
+    """Cuenta en cuántas bolsas de `pt_folder` aparece cada clase como
+    positiva, usando la misma resolución dinámica de etiquetas que dataset.py.
+
+    Por qué existe: un split (train/val/test) puede tener muy pocos positivos
+    de una clase rara por pura variación estadística del reparto, y eso es
+    indistinguible -- mirando solo ese split -- de una clase que sigue sin
+    resolverse bien contra el catálogo. Esta función da el conteo sobre TODO
+    el dataset, para que evaluar_comil.py pueda mostrar ambos números uno al
+    lado del otro y la diferencia entre "es rara de verdad" y "hubo mala
+    suerte en el split" quede visible sin tener que investigar a mano."""
+    conteo = {c: 0 for c in catalogo_vigente}
+    for ruta in glob.glob(os.path.join(pt_folder, "*.pt")):
+        data = torch.load(ruta, map_location="cpu", weights_only=False)
+        crudas = data.get("roi_labels")
+        if not crudas:
+            continue
+        vector = vectorizar_etiquetas(crudas, catalogo_vigente, renombres)
+        for i, clase in enumerate(catalogo_vigente):
+            if vector[i] == 1:
+                conteo[clase] += 1
+    return conteo
 
 
 def clave_imagen_desde_archivo(nombre_archivo: str) -> str:

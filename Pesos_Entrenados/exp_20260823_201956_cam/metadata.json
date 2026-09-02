@@ -1,0 +1,36 @@
+{
+  "arquitectura": "cam (InstanceEncoderCAM: 1 forward pass por ROI completo, instancias = celdas del mapa de features nativo de MobileNetV2)",
+  "epochs": 30,
+  "batch_size": 1,
+  "learning_rate": 0.0001,
+  "loss_final": 0.8947722546334537,
+  "num_classes": 12,
+  "class_names": [
+    "Tejido de Granulación",
+    "Fibrina (Esfacelo)",
+    "Tejido Necrótico (Escara)",
+    "Tejido Calloso (Hiperqueratosis)",
+    "Exudado",
+    "Epitelización",
+    "Hueso Expuesto",
+    "Tendón / Músculo Expuesto",
+    "Piel Perilesional Sana",
+    "Maceración / Eritema",
+    "Hiperpigmentación",
+    "Hipergranulación"
+  ],
+  "ruta_bolsas_origen_roi": "C:\\Users\\Becario\\Personal_Adrian\\Co_MIL_PPS\\APP_generador_bolsas\\Dataset_Experto_100\\Bolsas_MIL_Procesadas\\224px",
+  "ruta_manifest": "C:\\Users\\Becario\\Personal_Adrian\\Co_MIL_PPS\\APP_generador_bolsas\\Dataset_Experto_100\\Bolsas_MIL_Procesadas\\splits_manifest.json",
+  "bolsas_entrenamiento": 106,
+  "imagenes_por_split": {
+    "train": 36,
+    "test": 11,
+    "val": 11
+  },
+  "dispositivo": "cpu",
+  "limitaciones_conocidas": [
+    "Sin aumento de datos todavía (CoMILDatasetCAM no lo implementa aún).",
+    "batch_size=1 (SGD por bolsa, no por lotes) porque cada ROI reconstruido tiene un tamaño físico distinto -- no comparable 1:1 con la corrida de parches (batch_size=8) en cuanto a dinámica de optimización."
+  ],
+  "guardado_en": "2026-08-23T20:19:57.072365"
+}

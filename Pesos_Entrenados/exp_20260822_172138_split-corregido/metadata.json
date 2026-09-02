@@ -1,0 +1,41 @@
+{
+  "epochs": 30,
+  "batch_size": 8,
+  "learning_rate": 0.0001,
+  "loss_final": 0.8238197969538825,
+  "num_classes": 12,
+  "class_names": [
+    "Tejido de Granulación",
+    "Fibrina (Esfacelo)",
+    "Tejido Necrótico (Escara)",
+    "Tejido Calloso (Hiperqueratosis)",
+    "Exudado",
+    "Epitelización",
+    "Hueso Expuesto",
+    "Tendón / Músculo Expuesto",
+    "Piel Perilesional Sana",
+    "Maceración / Eritema",
+    "Hiperpigmentación",
+    "Hipergranulación"
+  ],
+  "ruta_bolsas": "C:\\Users\\Becario\\Personal_Adrian\\Co_MIL_PPS\\APP_generador_bolsas\\Dataset_Experto_100\\Bolsas_MIL_Procesadas\\224px",
+  "ruta_manifest": "C:\\Users\\Becario\\Personal_Adrian\\Co_MIL_PPS\\APP_generador_bolsas\\Dataset_Experto_100\\Bolsas_MIL_Procesadas\\splits_manifest.json",
+  "bolsas_entrenamiento": 36,
+  "imagenes_por_split": {
+    "train": 36,
+    "test": 11,
+    "val": 11
+  },
+  "patch_size": {
+    "total_bolsas": 204,
+    "patch_sizes_encontrados": [
+      224
+    ],
+    "mezcla_de_resoluciones": false,
+    "parches_por_bolsa_min": 1,
+    "parches_por_bolsa_max": 48
+  },
+  "dispositivo": "cpu",
+  "nota": "Migrado desde Pesos_Entrenados/comil_miml_fase1.pth (checkpoint plano, sin carpeta de experimento) el 23-ago-2026. Fecha de carpeta = fecha real de entrenamiento (mtime del archivo original), no fecha de migracion.",
+  "guardado_en": "2026-08-23T00:15:45.996479"
+}

@@ -415,9 +415,427 @@ en el diseño existente del pipeline (no requieren rediseño desde cero):
         roadmap), y es más caro en cómputo --- probablemente necesite GPU/Colab.
 \end{enumerate}
 
-Con esto se da por cerrada la sesión de trabajo del 22 de agosto de 2026. Próxima entrada: Etapa 3
-del roadmap (diseño e implementación mínima de un búfer de repetición para el componente de
-aprendizaje continuo).
+Con esto se da por cerrada la sesión de trabajo del 22 de agosto de 2026.
+
+\section{23 de agosto de 2026}
+
+\entrada{Seguimiento de experimentos: cada corrida en su propia carpeta}{Motivado por confusión real
+al revisar resultados: había figuras de dos modelos distintos mezcladas en el mismo lugar sin
+ninguna forma de distinguirlas.}
+
+Nuevo módulo \texttt{CO-MIL/experimentos.py}: cada corrida de \texttt{entrenar\_comil.py} ahora crea
+su propia carpeta \texttt{Pesos\_Entrenados/exp\_<fecha>\_<hora>/} con un \texttt{metadata.json} que
+registra la resolución de parche (escaneada de las bolsas reales, no asumida), el desglose
+train/val/test, número de clases e hiperparámetros. \texttt{evaluar\_comil.py} y
+\texttt{visualizar\_resultados.py} escriben sus resultados dentro de esa misma carpeta y cada imagen
+trae en el título la resolución de parche, la malla y el nombre del experimento. El checkpoint del
+22 de agosto se migró a \texttt{exp\_20260822\_172138\_split-corregido/} sin reentrenar; los
+archivos sueltos viejos se archivaron aparte con nombres explícitos.
+
+\entrada{Discusión crítica: qué puede y qué no puede resolver DenseCRF}{El autor observó, revisando
+el Artifact con el ejemplo de UPD\_013, que la malla de atención cruda y la refinada tenían
+exactamente la misma cuadrícula --- solo cambiaban los colores. Se investigó a fondo antes de seguir.}
+
+Se midió el contraste de atención (máximo menos mínimo) en las 47 combinaciones bolsa-clase
+positivas del split de prueba: la \textbf{mediana es de solo 0.04} (en escala 0--1). El caso de
+mayor contraste en todo el split (\texttt{UPD\_035\_\_roi\_05\_bag.pt}, tejido calloso, rango
+0.05--0.27) se usó para verificar el mecanismo con una imagen real: el refinamiento sí desplaza
+ligeramente un par de fronteras hacia bordes reales de la piel (Figura~\ref{fig:crf-limite}), pero
+nunca genera detalle \emph{dentro} de un bloque de 224px, porque el término unario (la atención
+cruda del modelo) no tiene ninguna información a esa escala --- no es un error del código, es una
+limitación matemática esperable del método: el CRF refina lo que ya existe, no inventa resolución
+que el parche nunca calculó.
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=\textwidth]{figuras/fig_crf_limite_mejor_contraste.png}
+\caption{El caso de mayor contraste de atención disponible en todo el split de prueba (23 de agosto
+de 2026). El refinamiento desplaza fronteras hacia bordes reales de la piel, pero no genera detalle
+dentro de un bloque --- confirma que la limitación es de resolución de la señal de entrada, no del
+algoritmo de refinamiento.}
+\label{fig:crf-limite}
+\end{figure}
+
+\textbf{Conclusión}: para lograr precisión espacial útil clínicamente (el objetivo explícito es
+acercarse a algo parecido a segmentación multiclase, sin llegar a serlo), la vía real es reducir el
+tamaño de parche, no seguir ajustando el CRF. También se corrigió la presentación visual de los
+heatmaps (antes \texttt{jet} con alta opacidad, que tapaba la úlcera real): ahora usan
+\texttt{viridis}, opacidad baja con máscara por umbral, y normalización por bolsa (necesaria porque
+con rangos de atención tan chicos, una escala de color absoluta 0--1 se ve plana en casi todos los
+casos).
+
+\entrada{Costo computacional de reducir el tamaño de parche}{Pregunta directa del autor: ¿es posible
+llegar a parches de 20$\times$20 px?}
+
+El número de parches por bolsa escala con $(224/P)^2$ para una ROI del mismo tamaño físico. La
+bolsa más grande hoy (N=48, malla 6$\times$8 a 224px) se transforma así:
+
+\begin{table}[H]
+\centering
+\caption{Costo relativo de reducir el tamaño de parche (bolsa más grande del dataset actual).}
+\begin{tabular}{lrrl}
+\toprule
+Tamaño de parche & Parches (N) & Factor de cómputo & Factibilidad \\
+\midrule
+224 px (actual) & 48 & 1$\times$ & ya corre en CPU \\
+112 px & $\sim$192 & $\sim$4$\times$ & probable en CPU hoy mismo (1--1.5h) \\
+56 px & $\sim$768 & $\sim$16$\times$ & necesita GPU/Colab \\
+20 px & $\sim$6{,}000+ & $\sim$125$\times$ & no viable ni con GPU modesta \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Además del costo, hay una duda independiente: un parche de 20px puede no contener suficiente
+textura para que MobileNetV2 extraiga una característica útil por instancia. \textbf{Decisión
+pendiente}: 112px es la prueba realista para hoy; 56px queda condicionado a tener GPU/Colab
+disponible; 20px se descarta como meta directa por ahora.
+
+\entrada{Por qué las métricas de clasificación salen bien con atención casi plana}{Pregunta directa
+del autor: si el modelo no distingue entre parches, ¿cómo llega a esas métricas?}
+
+Se verificó: \textbf{97.8\% de las bolsas de prueba (45 de 46) contienen un solo tipo de tejido en
+todos sus parches.} Como el logit de la bolsa sale de $z = \sum_i \alpha_i h_i$ (promedio ponderado
+por atención), una atención casi uniforme simplemente significa que $z$ es casi el promedio simple
+de los parches --- y como la bolsa ya es homogénea, ese promedio es una firma limpia y
+representativa del tejido, fácil de clasificar bien. El AUC alto es real y válido para
+clasificación; no implica que la atención haya aprendido a localizar nada, porque el propio recorte
+manual de ROIs pequeñas y casi de un solo tejido (protocolo v2) ya hizo ese trabajo de localización
+a mano --- no queda heterogeneidad dentro de la bolsa para que la atención busque.
+
+Esto conecta con el Manual de Usuario original (9 de agosto de 2026), que pedía dejar 15--25\% de
+piel sana alrededor de la úlcera "como referencia visual para el modelo" --- ese margen generaba
+heterogeneidad real dentro de la bolsa (tejido + piel sana mezclados) que sí le habría dado a la
+atención algo genuino que localizar. El protocolo v2 mejoró la limpieza de la señal de clasificación
+pero, sin buscarlo, redujo también la heterogeneidad que la atención necesita para ser informativa.
+Los dos problemas (parche grueso y bolsa homogénea) apuntan hacia la misma solución.
+
+\entrada{Propuesta creativa: MIL denso estilo CAM}{Solicitada explícitamente por el autor ("sé
+creativo, propón soluciones innovadoras, incluso una metodología nueva"). La tesis aún no se
+presenta formalmente, así que el alcance todavía se puede ajustar --- pero debe decidirse pronto.}
+
+Propuesta concreta: en vez de teselar la ROI en parches independientes, pasar la ROI completa por
+la red convolucional \textbf{una sola vez}, y usar el mapa de características nativo que la CNN ya
+produce como malla de instancias, en vez de un mallado de 224px trazado a mano. MobileNetV2 reduce
+la imagen $\sim$32$\times$; una ROI de 896$\times$1152px daría una malla de $\sim$28$\times$36 ---
+mucho más fina que la malla actual de 6$\times$8, y más barata en cómputo (una sola pasada de toda
+la imagen, no N pasadas de parches por separado). El cambio de código es quirúrgico: solo se
+reemplaza \texttt{InstanceEncoder}; \texttt{AttentionAggregator} (las $K$ ramas de atención) y
+\texttt{BagClassifier} no cambian, porque ya operan sobre un conjunto genérico de vectores de
+instancia sin importar cómo se produjeron. No es abandonar MIL: es la línea de MIL basado en
+\emph{pooling}/CAM (ej. Pinheiro \& Collobert, 2015, "From image-level to pixel-level labeling with
+CNNs"), una variante real y citable, no una invención sin respaldo. Complementaria (más esfuerzo,
+segunda fase si la malla densa no basta): instancias por superpíxel (SLIC) en vez de malla rígida,
+con fronteras que siguen el color/textura real de la piel.
+
+\textbf{Estado}: propuesta, aún no diseñada a detalle ni implementada. Plan acordado: hoy se prueba
+el tamaño de parche de 112px sobre la arquitectura actual; esta propuesta se diseña con calma la
+siguiente sesión.
+
+\entrada{Pregunta crítica de despliegue: recorte de ROI en producción}{Igualmente señalada como
+crucial por el autor.}
+
+Todo el pipeline actual --- entrenamiento e inferencia --- asume que se le entrega una ROI ya
+recortada (trazada a mano con \texttt{generador\_bolsas.py}). No existe ningún paso automático de
+localización de la úlcera. Esto no es un hallazgo nuevo: la bitácora original ya había planeado un
+localizador automático basado en U-Net y lo pospuso explícitamente el 6 de abril de 2026 por
+alcance de MVP. La pregunta del autor es legítima y queda abierta: ¿el usuario final deberá recortar
+o hacer zoom a la úlcera antes de pasar la foto por el modelo (más simple, replica el flujo actual
+de anotación), o hay que construir el localizador automático que se pospuso? Dado el tiempo
+disponible antes de la reunión con el tutor, la recomendación es \textbf{no} construir el
+localizador esta semana, pero sí documentar explícitamente como requisito/limitación del sistema
+actual que la entrada debe ser una ROI ya recortada --- en vez de dejarlo implícito.
+
+\entrada{Tensión real entre anotación débil y esfuerzo de anotación efectivo}{Reflexión del autor
+sobre el planteamiento original del tutor.}
+
+La justificación original del tutor para usar MIL fue que la anotación débil (etiqueta a nivel de
+bolsa, sin máscara) sería más rápida que la anotación densa. En la práctica, conseguir una señal de
+atención limpia ha llevado a trazar ROIs cada vez más pequeñas y casi de un solo tejido (algunas
+imágenes ya superan 45 bolsas), acercando el esfuerzo de anotación al de una segmentación casi
+completa. Esto es una tensión real y reconocida en la literatura de aprendizaje débilmente
+supervisado (entre más "limpias"/finas las bolsas, mejor la localización pero menor el ahorro de
+anotación respecto a supervisión completa) --- no es un error de ejecución del autor. Vale la pena
+discutirlo explícitamente con el tutor y documentarlo como limitación reconocida en la tesis.
+
+\entrada{Diagramas didácticos del mecanismo de atención y del pipeline de inferencia}{El autor pidió
+recursos visuales de alta calidad para repasar el proyecto y para usar en el artículo/presentaciones
+--- no artifacts, archivos reales.}
+
+Se generaron dos figuras vectoriales (\texttt{.svg}/\texttt{.pdf}/\texttt{.png}) con
+\texttt{matplotlib}, construidas directamente a partir del código real (no una interpretación
+aproximada): \texttt{fig\_mecanismo\_atencion\_mil} (el cálculo interno de
+\texttt{AttentionAggregator}: compuerta $V \odot U$, apilado de puntuaciones, softmax por fila,
+$z_k = \sum_i \alpha_{k,i} h_i$, con una skip connection dibujada explícitamente para $h_i$) y
+\texttt{fig\_pipeline\_foto\_prediccion} (vista de alto nivel: foto $\to$ ROI recortado a mano $\to$
+parches $\to$ red $\to$ probabilidades + heatmap, con la limitación del recorte manual señalada
+directamente en el diagrama). Ambas pasaron por varias rondas de retroalimentación visual real del
+autor (bloques con altura despareja, flechas cruzadas, texto desbordando su caja) hasta llegar a una
+versión con alturas de bloque uniformes y sin colisiones. La lección de proceso que vale la pena
+dejar anotada: el script final que genera estas figuras (carpeta
+\texttt{\_proceso\_claude/scripts/}) ya no ajusta posiciones a mano por prueba y error --- deriva la
+altura de cada bloque sumando
+constantes con nombre, reparte el contenido de los bloques con menos material con una función
+\texttt{distribuir\_verticalmente()}, y verifica desbordes de texto con el \emph{bounding box}
+realmente renderizado (\texttt{get\_window\_extent}) en vez de una estimación de caracteres --- así,
+si el catálogo de clases crece o cambian los datos de ejemplo, la figura se puede regenerar sin
+repetir el mismo ciclo de ajuste manual.
+
+\entrada{Resultado real de la prueba a 112px}{Continuación del punto sobre costo computacional de
+reducir el tamaño de parche.}
+
+Se entrenó (30 épocas, mismo split train/val/test que la corrida de 224px) y evaluó la red con
+parches de 112px. Loss final de entrenamiento: 0.9112 (vs.\ 0.8238 a 224px) --- converge sano pero a
+un punto más alto, consistente con que a 112px cada bolsa tiene $\sim$4$\times$ más parches
+($N\approx$192 vs.\ 48) y el softmax de atención debe repartirse entre muchas más opciones con el
+mismo presupuesto de épocas. Para que la comparación de AUC-ROC fuera realmente justa se
+reevaluó también el checkpoint de 224px sobre el split de prueba \emph{actual} (46 bolsas, el
+manifiesto había crecido desde la última evaluación registrada): el resultado es mixto, con ventaja
+neta leve para 112px. Mejoran Fibrina (0.722$\to$0.777, el tejido más difícil según el artículo
+italiano de referencia) y, marginalmente, Granulación e Hiperpigmentación; empeoran Epitelización
+(0.796$\to$0.746) y Tejido Necrótico (0.698$\to$0.668). Las métricas agregadas favorecen 112px:
+Hamming Loss 0.279$\to$0.257, Exactitud de subconjunto 0.044$\to$0.196, F1 ponderado 0.43$\to$0.47.
+\textbf{No es una conclusión sólida todavía} --- varias clases tienen 0--2 positivos en este split
+(su AUC se mueve $\pm$0.15--0.30 con un solo caso) --- pero es material legítimo para llevar a la
+reunión con el tutor en vez de decidir unilateralmente.
+
+\entrada{Verificación: el bug de catálogo fragmentado no se repitió, y se blindó contra el futuro}{El
+autor recordó que en una sesión anterior el sistema reportaba ``pocas imágenes'' para Piel
+Perilesional Sana y Tejido Necrótico cuando en realidad había más --- un síntoma del bug de catálogo
+fragmentado resuelto en la Etapa 0 (21--22 de agosto)--- y preguntó si había vuelto a pasar.}
+
+Se auditaron las 204 bolsas de 224px y las 200 de 112px (función
+\texttt{etiquetas\_no\_reconocidas} de \texttt{catalogo\_tejidos.py}): \textbf{0 etiquetas sin
+resolver en ambas carpetas}. El bug no se repitió; el fix de la Etapa 0 sigue vigente. Los conteos bajos del split de
+prueba resultaron ser reales, no un síntoma de bug: Tejido Necrótico tiene 26 bolsas positivas en
+todo el dataset (solo le tocaron 5 en este split por variación normal del reparto) y Piel
+Perilesional Sana tiene apenas 7--10 (según la resolución) --- es, genuinamente, el tejido más raro
+del catálogo. Para que esta pregunta no tenga que resolverse a mano cada vez, se dejaron dos piezas
+permanentes en el código (no un script de diagnóstico aparte): \texttt{catalogo\_tejidos.py} ganó
+\texttt{auditar\_etiquetas\_no\_reconocidas()} (escanea una carpeta de bolsas y devuelve, por
+archivo, qué etiquetas crudas no matchean el catálogo vigente) y
+\texttt{contar\_positivos\_por\_clase()} (conteo real por clase en todo el dataset, no solo un
+split). Ambas funciones ahora corren automáticamente al inicio de \texttt{entrenar\_comil.py} y de
+\texttt{evaluar\_comil.py}: la primera imprime una alerta si encuentra etiquetas sin resolver, y la
+segunda hace que cada línea del reporte de AUC-ROC muestre el conteo del split \emph{junto al}
+conteo del dataset completo (p.\ ej.\ \texttt{positivos=2/46 (dataset=7/200)}), así que la pregunta
+``¿es una clase rara de verdad o hubo mala suerte en el split?'' se responde con solo leer el
+reporte, sin tener que auditar nada a mano.
+
+\entrada{Auditoría visual de los heatmaps: dos bugs y un problema metodológico de fondo}{El autor
+revisó personalmente los paneles generados del experimento 112px y reportó que le daban poca
+esperanza: sin referencia de qué significan los colores, con zonas sin cuadricular, y con las zonas
+sí coloreadas cayendo sobre piel sana o fondo en vez de la úlcera.}
+
+Se inspeccionaron \texttt{UPD\_001\_bag.png} y \texttt{UPD\_025\_\_roi\_01\_bag.png} directamente.
+Confirmado: (1) la barra de color es invisible por un bug real en \texttt{visualizar\_resultados.py}
+--- se genera con \texttt{alpha=0}, transparencia que se contagia a la leyenda; (2) las zonas ``sin
+cuadricular'' no son un error de dibujo sino el reflejo visual directo del hallazgo de atención plana
+del 23 de agosto: el código solo pinta un parche si su atención normalizada por bolsa supera 35\%, y
+con atención casi uniforme la mayoría de los parches caen por debajo y se vuelven transparentes; (3)
+el hallazgo nuevo y más serio: con lesiones alargadas o diagonales, la caja rectangular que las
+contiene captura una fracción grande de piel sana de relleno, porque \texttt{generador\_bolsas.py}
+solo permite anotar rectángulos alineados a los ejes. Achicar el parche ayuda a separar lesión de
+relleno \emph{dentro} de una caja, pero si a la vez se usan ROIs más chicas y limpias para reducir
+ese relleno, se vuelve a caer en bolsas homogéneas sin heterogeneidad interna para que la atención
+discrimine --- es la misma tensión de fondo (ver entrada siguiente) manifestándose de dos formas
+visuales distintas.
+
+\entrada{Tensión de protocolo de anotación (v1 vs.\ v2) y la pregunta de mejora sustancial}{Discusión
+extensa motivada por la entrada anterior: el autor preguntó explícitamente si sabemos ya cuál
+protocolo de anotación es mejor, y planteó la preocupación de fondo de si el proyecto va a lograr una
+mejora sustancial sobre su propio artículo previo (coautoría del autor, supervisión densa
+completamente supervisada) antes de someter formalmente la solicitud de tesis.}
+
+Sobre el protocolo: no existe todavía una comparación controlada entre ROIs grandes/multi-tejido
+(``v1'', con margen deliberado de piel sana) y ROIs chicas/casi-un-solo-tejido (``v2''). Ambos
+optimizan objetivos parcialmente opuestos --- v1 conserva heterogeneidad interna (mejor localización
+potencial, etiquetas más ambiguas), v2 da etiquetas limpias pero destruye esa heterogeneidad (el
+97.8\% de bolsas homogéneas ya documentado). El autor priorizó explícitamente granularidad de
+localización sobre limpieza de clasificación, por ser la utilidad clínica real el objetivo del
+proyecto --- esto inclina la decisión hacia v1, o mejor, hacia una arquitectura que no obligue a
+elegir entre ambos (ver estilo CAM más abajo). Se corrigió además un dato de capacidad: el techo real
+de imágenes disponibles no son las 100 de \texttt{Dataset\_Experto\_100}, son \textbf{268} en total
+(lote recibido el 6 de abril de 2026, documentado en \texttt{co\_mil\_bitacora.pdf} y
+\texttt{co\_mil\_bitacora\_parte2.pdf}); las ~168 restantes existen pero no están preparadas en el
+pipeline.
+
+Sobre la mejora sustancial: la respuesta honesta es que \textbf{no se puede prometer que Co-MIL supere
+en Dice} al trabajo previo (ResUnet+Unet++, supervisión densa, 1000+ imágenes) --- con 58--268
+imágenes y etiquetas débiles, competir en la misma métrica contra supervisión densa con muchas más
+imágenes no es una expectativa realista, y no es un fracaso del proyecto sino una consecuencia
+aritmética de la información disponible. La mejora defendible está en ejes que el trabajo previo no
+abordaba: costo de anotación, aprendizaje continuo (Etapa 3, objetivo específico 3, sigue en 0\%), y
+viabilidad embebida. Si la localización sigue tan plana como hoy, esa narrativa alternativa tampoco
+se sostiene del todo, porque mostrarle al médico dónde está cada tejido requiere localización que
+funcione --- de ahí la urgencia de la siguiente entrada.
+
+\entrada{Investigación dirigida (deep research) sobre alternativas al colapso de atención, verificada
+fuente por fuente}{A petición del autor se usó Gemini Deep Research (con un prompt extenso que incluía
+todo el contexto técnico y las restricciones reales del proyecto) para buscar alternativas más
+recientes al operador Sm (NeurIPS 2024) propuesto antes. Cada cita relevante del reporte se verificó
+de forma independiente contra la fuente primaria antes de aceptarla --- el reporte contenía tanto
+hallazgos reales como detalles inventados.}
+
+Verificado como real, cada uno contra su fuente primaria (arXiv/ResearchGate/PubMed): \emph{AEM:
+Attention Entropy Maximization for Multiple Instance Learning based Whole Slide Image Classification}
+(Zhang, Y. et al., MICCAI 2025, \texttt{arXiv:2406.15303}) agrega un término de entropía a la función
+de pérdida para penalizar la concentración excesiva de atención, sin tocar la arquitectura;
+\emph{ASMIL: Attention-Stabilized Multiple Instance Learning for Whole Slide Imaging} (Ye, L. et al.,
+\texttt{arXiv:2603.06658}, marzo 2026) reemplaza softmax por una sigmoide normalizada para permitir
+que varios parches puntúen alto de forma independiente en vez de competir por una masa de probabilidad
+fija; \emph{From Correlation to Causation: Max-Pooling-Based Multi-Instance Learning...} (Liu, X. et
+al., \texttt{arXiv:2408.09449}, método ``FocusMIL'') diagnostica que la atención puede aprender
+``evidencia negativa'' del fondo para clasificar bolsas positivas, el mismo mecanismo sospechado en
+cajas con mucho relleno de piel sana; \emph{QG-MIL: A Gated Transformer Aggregator for
+Domain-Agnostic Multiple Instance Learning in Medical Imaging} (Zedda, L. et al.,
+\texttt{arXiv:2606.20027}) --- nota: el reporte de Gemini inventó el backrónimo ``Qwen Gated'', el
+paper real solo dice ``Gated''; \emph{Geometric multi-instance learning for weakly supervised gastric
+cancer segmentation} (Huang, C., Xia, H., Xiao, X. et al., \emph{npj Digital Medicine}, 2026) modela
+relaciones espaciales explícitas entre parches vía grafo, diagnosticando el mismo problema
+(``bolsa de parches desordenada que ignora topología'') casi con las mismas palabras que usamos aquí,
+pero de implementación bastante más cara (semanas, no 1 día). También se confirmó, con cifras exactas,
+un despliegue móvil real: ViT-Small (22M parámetros) empaquetado en una app iOS de 41MB con 50--80ms
+de inferencia, entrenado sobre DFUC2021 (dataset público, 5{,}955 imágenes) para clasificar
+isquemia/infección --- preprint en Research Square, diciembre 2025, aún no revisado por pares.
+
+Advertencia que debe quedar explícita: \textbf{ninguno} de estos métodos (ni el operador Sm
+investigado antes) fue evaluado en fotos clínicas pequeñas parecidas a las nuestras --- todos se
+probaron en laminillas de patología completas o tomografías, con miles de parches y cientos o miles
+de casos. Seguimos sin un precedente directo de este método funcionando a nuestra escala y modalidad.
+La sección de ``opinión experta'' del reporte de Gemini tenía además un tono de certeza absoluta
+impropio de investigación real (incluyendo cifras que no se pudieron verificar en la fuente) --- se
+descartó como veredicto y se conserva solo lo verificado arriba.
+
+\textbf{Plan revisado para el 24 de agosto} (reemplaza el prototipo de rediseño CAM-style que se
+había planeado para ese día): leer las ecuaciones exactas de AEM y ASMIL directo de los papers,
+implementar AEM primero (el cambio más barato: solo la función de pérdida, sin tocar arquitectura ni
+comprometer la compatibilidad con el clasificador ya entrenado), reentrenar y medir si el contraste
+de atención mejora de forma real sobre la mediana base de 0.04. Si el tiempo alcanza, probar también
+ASMIL. Se descarta el spot-check de SAM que se había planeado --- la evidencia de hoy confirma que sin
+ajuste fino no da señal confiable en piel/heridas. Si el contraste mejora: evaluar si basta o si
+además hace falta el rediseño CAM-style. Si no mejora: pasar a planear ese rediseño y/o la
+supervisión mixta (MS-CLAM, ya documentada) como plan B con evidencia real detrás, no como salto al
+vacío.
+
+\entrada{Implementación real del rediseño estilo CAM y primer entrenamiento lanzado}{Tras el
+análisis de AEM/ASMIL, el autor pidió implementar directamente la vía con más sustento matemático
+real en vez de seguir explorando parches por regularización.}
+
+Antes de escribir el modelo completo se hizo una prueba de factibilidad barata (sin entrenar nada):
+tomar el mapa de features nativo de MobileNetV2 (congelado, solo pesos de ImageNet) sobre el ROI
+reconstruido de \texttt{UPD\_025\_\_roi\_01\_bag} (la lesión diagonal delgada) y visualizarlo. El
+resultado fue una franja de activación siguiendo visualmente la lesión real, con 1078 celdas nativas
+contra los 22 parches actuales --- 49$\times$ más fino, con 1 solo forward pass en vez de 22.
+
+Con esa señal, se implementó la arquitectura real, sin reemplazar el pipeline original (ambos
+coexisten para poder comparar): \texttt{CO-MIL/dataset\_cam.py} (\texttt{CoMILDatasetCAM}, reconstruye
+el ROI completo a partir de los parches ya guardados, reutilizando el mismo filtro de split y las
+mismas etiquetas que \texttt{CoMILDataset}), \texttt{CO-MIL/Models/attention\_mil\_cam.py}
+(\texttt{InstanceEncoderCAM}: un solo forward pass del ROI completo; \texttt{AttentionAggregator} y
+\texttt{BagClassifier} se importan de \texttt{attention\_mil.py} sin ningún cambio, tal como se había
+previsto), y \texttt{CO-MIL/entrenar\_comil\_cam.py} (\texttt{batch\_size=1}, porque cada ROI
+reconstruido tiene un tamaño físico distinto y no se puede empaquetar en un lote fijo como los
+parches uniformes; reutiliza \texttt{calcular\_pos\_weights} y \texttt{congelar\_backbone} de
+\texttt{entrenar\_comil.py} por import). Se verificó con una prueba de humo (forward + backward sobre
+3 bolsas reales) antes de lanzar la corrida completa de 30 épocas en segundo plano la noche del 23 de
+agosto. Limitación conocida y documentada en el propio \texttt{metadata.json} del experimento: esta
+variante todavía no tiene aumento de datos, y el entrenamiento por bolsa individual (en vez de por
+lotes) hace la optimización más ruidosa --- la comparación contra la corrida original no será
+perfectamente controlada, pero sí es la evidencia real que hacía falta.
+
+\entrada{Resultado real de la evaluación del rediseño CAM: mixto, no concluyente}{El entrenamiento
+terminó la misma noche; se evaluó de inmediato para no dejar la pregunta abierta.}
+
+\texttt{evaluar\_comil.py} se adaptó para detectar la arquitectura del checkpoint
+(\texttt{checkpoint["arquitectura"]=="cam"}) y ramificar internamente en vez de mantener un script
+aparte --- un solo script sirve para ambas arquitecturas, a petición explícita del autor. Resultado
+sobre el split de prueba (46 bolsas): en clasificación, la mayoría de los AUC-ROC quedaron cerca o
+por debajo de 0.5 (p.\ ej.\ Granulación 0.415, Piel Perilesional Sana 0.136), claramente peor que la
+base por parches (0.7--0.9). En contraste de atención (47 pares bolsa-tejido positivos): mediana
+0.022 (peor que la base de 0.04), pero promedio 0.082 (2$\times$ más alto) y máximo 0.38 (nunca antes
+visto con parches, el mejor previo era 0.27). \textbf{No es un éxito ni un fracaso limpio} --- el
+patrón (máximo más alto, mediana peor, clasificación inestable) es consistente con las dos
+limitaciones ya conocidas de esta primera corrida: sin aumento de datos todavía en
+\texttt{CoMILDatasetCAM}, y \texttt{batch\_size=1} (optimización más ruidosa que la corrida
+original). Puesto a elegir entre reintentar con aumento de datos o detenerse aquí por hoy, el autor
+eligió explícitamente detenerse --- esta evaluación queda registrada como evidencia inconclusa de una
+sola corrida sin afinar, no como un veredicto sobre la arquitectura.
+
+Con esto se da por cerrada la sesión de trabajo del 23 de agosto de 2026 --- sesión larga, con
+avances reales pero también con una discusión metodológica de fondo que quedó documentada en detalle
+en \texttt{\_proceso\_claude/contexto/ROADMAP\_PoC.md} y no debe repetirse desde cero la próxima vez.
+Pendiente inmediato de la siguiente sesión, si se retoma este hilo: agregar aumento de datos a
+\texttt{CoMILDatasetCAM} y reentrenar antes de sacar cualquier conclusión real sobre el rediseño CAM.
+Pendientes de decisión más amplios, antes de continuar con la Etapa 3 (aprendizaje continuo, que
+sigue en 0\% y no debería posponerse más): protocolo de anotación v1 vs.\ v2, estrategia de recorte
+de ROI en producción, y si el proyecto representa una mejora sustancial defendible sobre el trabajo
+previo del autor o si conviene reenmarcar la contribución.
+
+\section{27 de agosto de 2026}
+
+\entrada{Material visual de seguimiento para la reunión con el tutor}{Reunión de seguimiento
+programada para hoy con el Dr. José Eduardo Chairez Veloz, de carácter informal: no se buscaba
+presentar cada detalle técnico, sino un recurso visual que ayudara a tomar decisiones sobre el
+proyecto.}
+
+Se preparó una presentación visual (publicada como página web, no como archivo \texttt{.pptx}) que
+resume en 11 diapositivas: el pipeline de inferencia y el mecanismo de atención (reutilizando
+\texttt{fig\_pipeline\_foto\_prediccion} y \texttt{fig\_mecanismo\_atencion\_mil}, ya documentadas);
+los cuatro problemas de higiene técnica corregidos desde la auditoría del 21 de agosto; la tabla de
+desempeño por tejido del primer entrenamiento válido (224px); el hallazgo de atención plana con la
+figura del límite del refinamiento DenseCRF; la comparación de los experimentos de 112px y del
+rediseño estilo CAM (incluida la imagen de la prueba de factibilidad, 49$\times$ más resolución); un
+resumen de las alternativas de literatura investigadas (AEM, ASMIL, FocusMIL); y, al final, las cinco
+decisiones abiertas que requieren la opinión del tutor (protocolo de anotación, arquitectura,
+encuadre de la contribución frente al artículo previo, aprendizaje continuo, y recorte de ROI en
+producción) junto con una recomendación preliminar de metodología de anotación para la sesión con el
+médico que se sumaría después de la reunión.
+
+\entrada{Composición espacial del catálogo de tejidos}{Pregunta directa del autor: ¿cuáles son los
+10 tejidos más abundantes \emph{en espacio}, no en número de bolsas, dentro del dataset anotado
+hasta ahora? Se agregó como diapositiva adicional a la presentación anterior.}
+
+Se calculó, sobre las 204 bolsas de \texttt{Dataset\_Experto\_100} a 224px, el área acumulada de
+\texttt{bbox\_expanded} (el recuadro ya expandido por \texttt{smart\_expansion}, en p\'ixeles
+cuadrados) de todas las bolsas donde cada tejido aparece como positivo, resolviendo las etiquetas
+crudas contra el catálogo vigente con las mismas funciones de \texttt{catalogo\_tejidos.py} que usan
+\texttt{entrenar\_comil.py} y \texttt{evaluar\_comil.py} (0 etiquetas sin reconocer, consistente con
+las auditorías anteriores). Como las bolsas son multietiqueta, el área de una bolsa se suma para
+\emph{cada} tejido presente en ella --- esto mide la huella espacial de las anotaciones, no una
+segmentación pixel a pixel, que este dataset no tiene.
+
+\begin{table}[H]
+\centering
+\caption{Top 10 tejidos por área espacial acumulada (Dataset\_Experto\_100, 224px, 204 bolsas).}
+\begin{tabular}{clrrr}
+\toprule
+\# & Tejido & Área (Mpx$^2$) & Bolsas & Imágenes \\
+\midrule
+1  & Tejido de Granulación             & 16.36 & 58 & 31 \\
+2  & Fibrina (Esfacelo)                & 14.45 & 41 & 21 \\
+3  & Maceración / Eritema              & 12.83 & 28 & 15 \\
+4  & Tejido Calloso (Hiperqueratosis)  & 8.13  & 12 & 7  \\
+5  & Hipergranulación                  & 6.62  & 8  & 8  \\
+6  & Hiperpigmentación                 & 5.83  & 8  & 4  \\
+7  & Tejido Necrótico (Escara)         & 4.47  & 26 & 11 \\
+8  & Piel Perilesional Sana            & 4.11  & 10 & 4  \\
+9  & Epitelización                     & 3.61  & 13 & 8  \\
+10 & Exudado                           & 3.21  & 8  & 6  \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\noindent (11.\ Tendón/Músculo Expuesto: 0.10 Mpx$^2$ en 1 bolsa; 12.\ Hueso Expuesto: 0 --- sigue sin
+ningún ejemplo en todo el dataset.)
+
+Dos lecturas quedaron registradas para la reunión: primero, área y frecuencia no siempre coinciden
+--- Tejido Calloso aparece en solo 12 bolsas pero ya es el \#4 en área (cajas individuales grandes),
+mientras que Maceración/Eritema está en 28 bolsas y es \#3 en área total pero tenía solo 1 positivo en
+el split de prueba de 46 bolsas (tabla de la sección del 22 de agosto) --- abundancia real en el
+dataset que el split de evaluación todavía no refleja. Segundo, esta métrica es sensible al protocolo
+de anotación (ver discusión de protocolo v1 vs.\ v2 en la sección del 23 de agosto): cajas con margen
+de piel sana inflan el área de todos los tejidos que coexisten en ellas, así que no mide el área real
+de cada tejido en la herida, solo cuánto espacio ocupan las anotaciones que lo incluyen.
 
 % -----------------------------------------------------------------------------------
 % Plantilla para futuras entradas. Copiar el bloque \entrada{...}{...} según se necesite
