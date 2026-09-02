@@ -15,6 +15,10 @@ data/
 images/
 CO-MIL/custom_classes.json
 
+# Datasets publicos descargados (DFUTissue, WoundTissue, etc.) -- no redistribuir,
+# cada uno con su propia licencia; se bajan con CO-MIL/segmentacion/descargar_datos.py
+datasets_publicos/
+
 # Excepcion: figuras reales de la bitacora/tesis (no son dataset clinico, son
 # resultados/diagramas que si deben versionarse)
 !documentación/figuras/*.png
@@ -27,6 +31,11 @@ dist/
 # Archivos de sistema operativo y VS Code
 .vscode/
 .DS_Store
+
+# Herramientas de asistencia local (no forman parte del proyecto ni deben
+# aparecer en el repo público)
+.claude/
+CLAUDE.md
 
 # Espacio de trabajo local (contexto, auditorías y scripts de apoyo del proceso,
 # no forman parte del código ni la documentación oficial de la tesis)
