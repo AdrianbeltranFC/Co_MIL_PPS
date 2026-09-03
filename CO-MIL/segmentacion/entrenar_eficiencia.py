@@ -65,14 +65,24 @@ CLASES_TEJIDO = [1, 2, 3]  # 0 = fondo
 # "tiene máscara" en este experimento.
 # ---------------------------------------------------------------------------
 class DFUTissueMixto(Dataset):
-    def __init__(self, split: str, nombres_con_mascara: set, augment: bool):
-        self.base = DFUTissueSeg(split, augment=augment)
-        self.con_mascara = nombres_con_mascara
+    """`solo_supervisado=True` -> el dataset solo contiene las N imágenes con máscara
+    (las demás ni se ven). `False` -> las 78, con una bandera de si tienen máscara."""
+
+    def __init__(self, split, nombres_con_mascara, augment, aug_fuerte=False,
+                 solo_supervisado=False):
+        base = DFUTissueSeg(split, augment=augment, aug_fuerte=aug_fuerte)
+        self.con_mascara = set(nombres_con_mascara)
+        if solo_supervisado:
+            self._idx = [i for i in range(len(base)) if base.nombres[i] in self.con_mascara]
+        else:
+            self._idx = list(range(len(base)))
+        self.base = base
 
     def __len__(self):
-        return len(self.base)
+        return len(self._idx)
 
-    def __getitem__(self, i):
+    def __getitem__(self, k):
+        i = self._idx[k]
         x, y = self.base[i]
         nombre = self.base.nombres[i]
         etiqueta_img = torch.zeros(NUM_CLASES, dtype=torch.float32)
@@ -130,14 +140,25 @@ def lse_pool(logits: torch.Tensor, r: float = 5.0) -> torch.Tensor:
 
 
 def entrenar_un_punto(n_mascaras, nombres_mascara, epocas, batch, lr, paciencia,
-                      semilla, dispositivo, lambda_debil=1.0):
+                      semilla, dispositivo, modo="mixto", aug_fuerte=False, lambda_debil=1.0):
+    """modo:
+       'mixto'            -> N máscaras (pérdida de segmentación) + (78-N) etiquetas (pérdida débil).
+       'solo_supervisado' -> N máscaras y nada más; las (78-N) restantes se IGNORAN.
+       La diferencia entre las dos curvas = cuánto aporta de verdad la anotación débil
+       (frente a «solo el modelo aprendiendo de N muestras»)."""
     torch.manual_seed(semilla)
     np.random.seed(semilla)
 
-    ds_tr = DFUTissueMixto("train", nombres_mascara, augment=True)
+    ds_tr = DFUTissueMixto("train", nombres_mascara, augment=True, aug_fuerte=aug_fuerte,
+                           solo_supervisado=(modo == "solo_supervisado"))
+    if len(ds_tr) == 0:
+        return {"n_mascaras": n_mascaras, "modo": modo, "epocas_corridas": 0,
+                "mejor_epoca": 0, "minutos": 0.0, "val_dice_tejidos": 0.0,
+                "test": evaluar(construir_modelo("FPN", "mobilenet_v2").to(dispositivo),
+                                DataLoader(DFUTissueSeg("test"), batch_size=batch), dispositivo)}, None
     ds_va = DFUTissueSeg("val", augment=False)
     ds_te = DFUTissueSeg("test", augment=False)
-    dl_tr = DataLoader(ds_tr, batch_size=batch, shuffle=True)
+    dl_tr = DataLoader(ds_tr, batch_size=min(batch, max(1, len(ds_tr))), shuffle=True)
     dl_va = DataLoader(ds_va, batch_size=batch, shuffle=False)
     dl_te = DataLoader(ds_te, batch_size=batch, shuffle=False)
 
@@ -183,6 +204,7 @@ def entrenar_un_punto(n_mascaras, nombres_mascara, epocas, batch, lr, paciencia,
     met_te = evaluar(modelo, dl_te, dispositivo)
     return {
         "n_mascaras": n_mascaras,
+        "modo": modo,
         "epocas_corridas": epoca,
         "mejor_epoca": mejor_epoca,
         "minutos": round((time.time() - t0) / 60, 1),
@@ -191,26 +213,71 @@ def entrenar_un_punto(n_mascaras, nombres_mascara, epocas, batch, lr, paciencia,
     }, mejor_state
 
 
-def graficar_curva(resultados, ruta_png):
+def agregar_por_n(runs):
+    """Agrupa por (modo, N) y saca media±std sobre semillas."""
+    from collections import defaultdict
+    grupos = defaultdict(list)
+    for r in runs:
+        grupos[(r.get("modo", "mixto"), r["n_mascaras"])].append(r)
+    agregado = []
+    for (modo, n) in sorted(grupos, key=lambda k: (k[0], k[1])):
+        rr = grupos[(modo, n)]
+        fila = {"modo": modo, "n_mascaras": n, "n_semillas": len(rr),
+                "semillas": [r.get("semilla") for r in rr]}
+        for clave in ["dice_medio_tejidos", "iou_medio_tejidos", "dice_medio_por_imagen"]:
+            vals = [r["test"][clave] for r in rr]
+            fila[clave + "_media"] = float(np.mean(vals))
+            fila[clave + "_std"] = float(np.std(vals))
+        for clase in ["Fibrina", "Granulación", "Callo"]:
+            vals = [r["test"]["dice_por_clase"][clase] for r in rr]
+            fila["dice_" + clase + "_media"] = float(np.mean(vals))
+            fila["dice_" + clase + "_std"] = float(np.std(vals))
+        agregado.append(fila)
+    return agregado
+
+
+def graficar_curva(runs, ruta_png):
     try:
         import matplotlib.pyplot as plt
     except ImportError:
         return
-    ns = [r["n_mascaras"] for r in resultados]
-    fig, ax = plt.subplots(figsize=(7.5, 5))
-    colores = {"Fibrina": "#C0392B", "Granulación": "#2E9E5B", "Callo": "#3B7DD8"}
-    for clase in ["Fibrina", "Granulación", "Callo"]:
-        ax.plot(ns, [r["test"]["dice_por_clase"][clase] for r in resultados],
-                "o-", label=clase, color=colores[clase])
-    ax.plot(ns, [r["test"]["dice_medio_tejidos"] for r in resultados],
-            "s--", label="media tejidos", color="#222", lw=2)
+    ag = agregar_por_n(runs)
+    modos = sorted({a["modo"] for a in ag})
+    estilo = {"mixto": ("var", "#1C6B63", "-", "N máscaras + etiquetas débiles"),
+              "solo_supervisado": ("var", "#B4791A", "--", "solo N máscaras (nada más)")}
+    fig, ax = plt.subplots(figsize=(8.4, 5.4))
+
+    if len(modos) == 1 and modos[0] == "mixto":
+        # vista por tejido (una sola curva)
+        colores = {"Fibrina": "#C0392B", "Granulación": "#2E9E5B", "Callo": "#3B7DD8"}
+        sub = [a for a in ag if a["modo"] == "mixto"]
+        ns = np.array([a["n_mascaras"] for a in sub])
+        for clase in ["Fibrina", "Granulación", "Callo"]:
+            m = np.array([a["dice_" + clase + "_media"] for a in sub])
+            s = np.array([a["dice_" + clase + "_std"] for a in sub])
+            ax.plot(ns, m, "o-", label=clase, color=colores[clase])
+            ax.fill_between(ns, m - s, m + s, color=colores[clase], alpha=0.15)
+        m = np.array([a["dice_medio_tejidos_media"] for a in sub])
+        s = np.array([a["dice_medio_tejidos_std"] for a in sub])
+        ax.plot(ns, m, "s--", label="media tejidos", color="#222", lw=2)
+        ax.fill_between(ns, m - s, m + s, color="#222", alpha=0.12)
+    else:
+        # comparación: ¿aporta la anotación débil?  media de tejidos, un color por modo
+        for modo in modos:
+            sub = [a for a in ag if a["modo"] == modo]
+            ns = np.array([a["n_mascaras"] for a in sub])
+            m = np.array([a["dice_medio_tejidos_media"] for a in sub])
+            s = np.array([a["dice_medio_tejidos_std"] for a in sub])
+            _, col, ls, lbl = estilo.get(modo, ("", "#555", "-", modo))
+            ax.plot(ns, m, "o", ls=ls, color=col, lw=2, label=lbl)
+            ax.fill_between(ns, m - s, m + s, color=col, alpha=0.15)
+
+    n_sem = max(a["n_semillas"] for a in ag)
     ax.set_xlabel("Nº de imágenes con máscara densa (de 78)")
-    ax.set_ylabel("Dice en test")
-    ax.set_title("Frontera de eficiencia de anotación — DFUTissue\n"
-                 "(N=0: solo etiqueta de imagen · N=78: supervisión densa completa)")
-    ax.grid(alpha=0.3)
-    ax.legend()
-    ax.set_ylim(0, 1)
+    ax.set_ylabel("Dice medio en tejidos (test)")
+    ax.set_title(f"Eficiencia de anotación — DFUTissue ({n_sem} semillas, banda = ±1σ)\n"
+                 "la brecha entre curvas = cuánto aporta de verdad la anotación débil")
+    ax.grid(alpha=0.3); ax.legend(); ax.set_ylim(0, 1)
     fig.tight_layout()
     fig.savefig(ruta_png, dpi=140, bbox_inches="tight")
     plt.close(fig)
@@ -220,48 +287,69 @@ def main():
     p = argparse.ArgumentParser()
     p.add_argument("--mascaras", default="0,5,10,20,40,78",
                    help="lista de N separada por comas")
+    p.add_argument("--semillas", default="42",
+                   help="lista de semillas separada por comas (varias -> curva con bandas de error)")
+    p.add_argument("--modos", default="mixto",
+                   help="'mixto', 'solo_supervisado', o ambos separados por coma. Con ambos, la "
+                        "brecha entre curvas responde: ¿aporta algo la anotación débil?")
+    p.add_argument("--aug_fuerte", action="store_true")
     p.add_argument("--epocas", type=int, default=120)
     p.add_argument("--batch", type=int, default=8)
     p.add_argument("--lr", type=float, default=1e-4)
     p.add_argument("--paciencia", type=int, default=28)
-    p.add_argument("--semilla", type=int, default=42)
+    p.add_argument("--guardar_modelos", action="store_true",
+                   help="guardar un .pth por corrida (por defecto no, para no llenar el disco)")
     args = p.parse_args()
 
     dispositivo = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     valores_n = [int(x) for x in args.mascaras.split(",")]
+    semillas = [int(x) for x in args.semillas.split(",")]
+    modos = [m.strip() for m in args.modos.split(",")]
     etiquetas = etiquetas_de_imagen_por_nombre("train")
 
     ruta_exp = os.path.join(DIR_PESOS, "eficiencia_" + datetime.now().strftime("%Y%m%d_%H%M%S"))
     os.makedirs(ruta_exp, exist_ok=True)
-    print(f"=== Curva de eficiencia | dispositivo {dispositivo.type.upper()} | N = {valores_n} ===")
+    print(f"=== Curva de eficiencia | {dispositivo.type.upper()} | N = {valores_n} | semillas = {semillas} ===")
     print(f"    salida: {os.path.relpath(ruta_exp, RAIZ_REPO)}\n")
 
-    resultados = []
+    runs = []
     for n in valores_n:
-        nombres_m = elegir_subconjunto(n, etiquetas, args.semilla)
-        print(f"[N={n:2d}]  ({len(nombres_m)} imágenes con máscara, {78 - len(nombres_m)} solo etiqueta)")
-        res, state = entrenar_un_punto(n, nombres_m, args.epocas, args.batch, args.lr,
-                                       args.paciencia, args.semilla, dispositivo)
-        d = res["test"]
-        print(f"       -> Dice medio tejidos {d['dice_medio_tejidos']:.3f}  "
-              f"(Fib {d['dice_por_clase']['Fibrina']:.3f} | "
-              f"Gra {d['dice_por_clase']['Granulación']:.3f} | "
-              f"Cal {d['dice_por_clase']['Callo']:.3f})   [{res['minutos']} min]")
-        torch.save({"model_state_dict": state, "n_mascaras": n},
-                   os.path.join(ruta_exp, f"modelo_N{n:02d}.pth"))
-        resultados.append(res)
-        # guardado incremental
-        with open(os.path.join(ruta_exp, "resultados.json"), "w", encoding="utf-8") as f:
-            json.dump({"config": vars(args), "dispositivo": dispositivo.type,
-                       "resultados": resultados}, f, ensure_ascii=False, indent=2)
-        graficar_curva(resultados, os.path.join(ruta_exp, "curva_eficiencia.png"))
+        for modo in modos:
+            if modo == "solo_supervisado" and n == 0:
+                continue  # sin imágenes no hay nada que entrenar
+            for semilla in semillas:
+                nombres_m = elegir_subconjunto(n, etiquetas, semilla)
+                print(f"[N={n:2d} {modo} semilla={semilla}]  "
+                      f"({len(nombres_m)} con máscara, "
+                      f"{78 - len(nombres_m) if modo == 'mixto' else 0} con etiqueta débil)")
+                res, state = entrenar_un_punto(n, nombres_m, args.epocas, args.batch, args.lr,
+                                               args.paciencia, semilla, dispositivo,
+                                               modo=modo, aug_fuerte=args.aug_fuerte)
+                res["semilla"] = semilla
+                d = res["test"]
+                print(f"       -> Dice medio tejidos {d['dice_medio_tejidos']:.3f}  "
+                      f"(Fib {d['dice_por_clase']['Fibrina']:.3f} | "
+                      f"Gra {d['dice_por_clase']['Granulación']:.3f} | "
+                      f"Cal {d['dice_por_clase']['Callo']:.3f})   [{res['minutos']} min]")
+                if args.guardar_modelos and state is not None:
+                    torch.save({"model_state_dict": state, "n_mascaras": n, "modo": modo,
+                                "semilla": semilla},
+                               os.path.join(ruta_exp, f"modelo_{modo}_N{n:02d}_s{semilla}.pth"))
+                runs.append(res)
+            with open(os.path.join(ruta_exp, "resultados.json"), "w", encoding="utf-8") as f:
+                json.dump({"config": vars(args), "dispositivo": dispositivo.type,
+                           "runs": runs, "agregado_por_n": agregar_por_n(runs)},
+                          f, ensure_ascii=False, indent=2)
+            graficar_curva(runs, os.path.join(ruta_exp, "curva_eficiencia.png"))
 
-    print("\n=== RESUMEN ===")
-    print(f"{'N':>4} | {'Fibrina':>8} {'Granul.':>8} {'Callo':>8} {'Media':>8}")
-    for r in resultados:
-        d = r["test"]["dice_por_clase"]
-        print(f"{r['n_mascaras']:>4} | {d['Fibrina']:>8.3f} {d['Granulación']:>8.3f} "
-              f"{d['Callo']:>8.3f} {r['test']['dice_medio_tejidos']:>8.3f}")
+    print("\n=== RESUMEN (media ± desv. estándar sobre semillas) ===")
+    print(f"{'modo':>17} {'N':>3} | {'Fibrina':>13} {'Granul.':>13} {'Callo':>13} {'Media':>13}")
+    for a in agregar_por_n(runs):
+        def mm(c):
+            return f"{a['dice_' + c + '_media']:.3f}±{a['dice_' + c + '_std']:.3f}"
+        print(f"{a['modo']:>17} {a['n_mascaras']:>3} | {mm('Fibrina'):>13} {mm('Granulación'):>13} "
+              f"{mm('Callo'):>13} "
+              f"{a['dice_medio_tejidos_media']:.3f}±{a['dice_medio_tejidos_std']:.3f}")
     print(f"\n[+] {os.path.relpath(ruta_exp, RAIZ_REPO)}")
 
 

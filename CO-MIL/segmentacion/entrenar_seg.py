@@ -71,8 +71,26 @@ def dice_iou_desde_confusion(cm: np.ndarray):
 # ---------------------------------------------------------------------------
 def construir_modelo(arch: str, encoder: str):
     fn = {"FPN": smp.FPN, "Unet": smp.Unet, "UnetPlusPlus": smp.UnetPlusPlus,
-          "DeepLabV3Plus": smp.DeepLabV3Plus}[arch]
+          "DeepLabV3Plus": smp.DeepLabV3Plus, "Segformer": smp.Segformer,
+          "MAnet": smp.MAnet}[arch]
     return fn(encoder_name=encoder, encoder_weights="imagenet", classes=NUM_CLASES, activation=None)
+
+
+def construir_perdida(nombre: str, dispositivo):
+    """dicece = Dice + entropía cruzada (por defecto).
+    tversky = Tversky (penaliza más los falsos negativos: alpha<beta) + CE -- mejor
+              para estructuras raras y pequeñas como la fibrina.
+    focal   = Focal (baja el peso de los píxeles fáciles, casi todos fondo) + Dice."""
+    ce = nn.CrossEntropyLoss()
+    if nombre == "tversky":
+        tv = smp.losses.TverskyLoss(mode="multiclass", from_logits=True, alpha=0.3, beta=0.7)
+        return lambda lg, y: 0.6 * tv(lg, y) + 0.4 * ce(lg, y)
+    if nombre == "focal":
+        fl = smp.losses.FocalLoss(mode="multiclass")
+        dl = smp.losses.DiceLoss(mode="multiclass", from_logits=True)
+        return lambda lg, y: 0.5 * dl(lg, y) + 0.5 * fl(lg, y)
+    dl = smp.losses.DiceLoss(mode="multiclass", from_logits=True)
+    return lambda lg, y: 0.5 * dl(lg, y) + 0.5 * ce(lg, y)
 
 
 def evaluar(modelo, loader, dispositivo):
@@ -103,26 +121,31 @@ def evaluar(modelo, loader, dispositivo):
 
 
 def entrenar(arch="FPN", encoder="mobilenet_v2", epocas=200, batch=8, lr=1e-4,
-             paciencia=40, semilla=42):
+             paciencia=40, semilla=42, perdida="dicece", aug_fuerte=False, sobremuestreo=False):
     torch.manual_seed(semilla)
     np.random.seed(semilla)
     dispositivo = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    print(f"=== Segmentación {arch}+{encoder} | dispositivo: {dispositivo.type.upper()} ===")
+    print(f"=== Segmentación {arch}+{encoder} | pérdida={perdida} "
+          f"aug_fuerte={aug_fuerte} sobremuestreo={sobremuestreo} | {dispositivo.type.upper()} ===")
 
-    ds_tr = DFUTissueSeg("train", augment=True)
+    ds_tr = DFUTissueSeg("train", augment=True, aug_fuerte=aug_fuerte)
     ds_va = DFUTissueSeg("val", augment=False)
     ds_te = DFUTissueSeg("test", augment=False)
     print(f"train {len(ds_tr)} | val {len(ds_va)} | test {len(ds_te)}")
 
-    dl_tr = DataLoader(ds_tr, batch_size=batch, shuffle=True, num_workers=0, drop_last=False)
+    if sobremuestreo:
+        from torch.utils.data import WeightedRandomSampler
+        from dataset_seg import pesos_sobremuestreo
+        w = pesos_sobremuestreo(ds_tr)
+        sampler = WeightedRandomSampler(w, num_samples=len(ds_tr), replacement=True)
+        dl_tr = DataLoader(ds_tr, batch_size=batch, sampler=sampler, num_workers=0)
+    else:
+        dl_tr = DataLoader(ds_tr, batch_size=batch, shuffle=True, num_workers=0)
     dl_va = DataLoader(ds_va, batch_size=batch, shuffle=False, num_workers=0)
     dl_te = DataLoader(ds_te, batch_size=batch, shuffle=False, num_workers=0)
 
     modelo = construir_modelo(arch, encoder).to(dispositivo)
-
-    # Pérdida: Dice (robusta al desbalance -- el fondo es ~90% de los píxeles) + CE.
-    dice_loss = smp.losses.DiceLoss(mode="multiclass", from_logits=True)
-    ce_loss = nn.CrossEntropyLoss()
+    fn_perdida = construir_perdida(perdida, dispositivo)
     opt = torch.optim.AdamW(modelo.parameters(), lr=lr, weight_decay=1e-4)
     sched = torch.optim.lr_scheduler.ReduceLROnPlateau(opt, mode="max", factor=0.5,
                                                        patience=15, min_lr=1e-6)
@@ -143,7 +166,7 @@ def entrenar(arch="FPN", encoder="mobilenet_v2", epocas=200, batch=8, lr=1e-4,
             x, y = x.to(dispositivo), y.to(dispositivo)
             opt.zero_grad()
             logits = modelo(x)
-            loss = 0.5 * dice_loss(logits, y) + 0.5 * ce_loss(logits, y)
+            loss = fn_perdida(logits, y)
             loss.backward()
             opt.step()
             perdida_acum += loss.item()
@@ -194,12 +217,14 @@ def entrenar(arch="FPN", encoder="mobilenet_v2", epocas=200, batch=8, lr=1e-4,
         "clases": CLASES,
         "epocas_max": epocas, "epocas_corridas": len(historial),
         "mejor_epoca": mejor_epoca, "batch": batch, "lr": lr, "semilla": semilla,
+        "perdida": perdida, "aug_fuerte": aug_fuerte, "sobremuestreo": sobremuestreo,
         "dispositivo": dispositivo.type,
         "minutos_entrenamiento": round((time.time() - t0) / 60, 1),
         "val": met_va_final, "test": met_te,
         "referencias_magnitud": {
+            "Italia_ResUnet+Unet++_DFUTissue": "Dice tejido: Fibrina 0.333 / Granulación 0.786 / Callo 0.515 (media ~0.545)",
             "DFUTissue_Unet_MiT-b3": "Dice medio ~0.85",
-            "Kabir2025_FPN_VGG16_LOOCV": "Dice ~0.82",
+            "Kabir2025_FPN_VGG16_LOOCV": "Dice ~0.82 (dataset distinto)",
         },
         "guardado_en": datetime.now().isoformat(),
     }
@@ -243,12 +268,18 @@ def _guardar_visualizaciones(modelo, ds, dispositivo, ruta_exp, n=8):
 
 if __name__ == "__main__":
     p = argparse.ArgumentParser()
-    p.add_argument("--arch", default="FPN", choices=["FPN", "Unet", "UnetPlusPlus", "DeepLabV3Plus"])
+    p.add_argument("--arch", default="FPN",
+                   choices=["FPN", "Unet", "UnetPlusPlus", "DeepLabV3Plus", "Segformer", "MAnet"])
     p.add_argument("--encoder", default="mobilenet_v2")
     p.add_argument("--epocas", type=int, default=200)
     p.add_argument("--batch", type=int, default=8)
     p.add_argument("--lr", type=float, default=1e-4)
     p.add_argument("--paciencia", type=int, default=40)
+    p.add_argument("--semilla", type=int, default=42)
+    p.add_argument("--perdida", default="dicece", choices=["dicece", "tversky", "focal"])
+    p.add_argument("--aug_fuerte", action="store_true")
+    p.add_argument("--sobremuestreo", action="store_true", help="muestrear 3x las imágenes con fibrina")
     args = p.parse_args()
     entrenar(arch=args.arch, encoder=args.encoder, epocas=args.epocas, batch=args.batch,
-             lr=args.lr, paciencia=args.paciencia)
+             lr=args.lr, paciencia=args.paciencia, semilla=args.semilla, perdida=args.perdida,
+             aug_fuerte=args.aug_fuerte, sobremuestreo=args.sobremuestreo)

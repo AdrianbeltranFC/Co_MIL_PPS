@@ -55,7 +55,8 @@ class DFUTissueSeg(Dataset):
     augment: solo debe activarse en 'train'.
     """
 
-    def __init__(self, split: str = "train", augment: bool = False, target_size: int = 256):
+    def __init__(self, split: str = "train", augment: bool = False, target_size: int = 256,
+                 aug_fuerte: bool = False):
         super().__init__()
         assert split in ("train", "val", "test")
         base = _raiz_dfutissue()
@@ -81,6 +82,7 @@ class DFUTissueSeg(Dataset):
 
         self.split = split
         self.augment = augment
+        self.aug_fuerte = aug_fuerte
         self.target_size = target_size
 
     def __len__(self) -> int:
@@ -113,14 +115,28 @@ class DFUTissueSeg(Dataset):
         img = np.ascontiguousarray(img)
         ann = np.ascontiguousarray(ann)
         # Fotométricas: solo a la imagen (brillo/contraste leves).
+        rango = 0.5 if self.aug_fuerte else 0.3
         if random.random() < 0.5:
-            f = 1.0 + (random.random() - 0.5) * 0.3
+            f = 1.0 + (random.random() - 0.5) * rango
             img = np.clip(img.astype(np.float32) * f, 0, 255).astype(np.uint8)
         if random.random() < 0.5:
             m = img.mean()
-            c = 1.0 + (random.random() - 0.5) * 0.3
+            c = 1.0 + (random.random() - 0.5) * rango
             img = np.clip((img.astype(np.float32) - m) * c + m, 0, 255).astype(np.uint8)
-        return img, ann
+
+        if self.aug_fuerte:
+            # Zoom / recorte aleatorio (escala 0.8-1.2): reencuadra imagen y máscara juntas.
+            if random.random() < 0.6:
+                img, ann = _escalar_recortar(img, ann)
+            # Desplazamiento de matiz por canal (robustez ante tono de piel / iluminación).
+            if random.random() < 0.5:
+                desp = (np.random.rand(3) - 0.5) * 30
+                img = np.clip(img.astype(np.float32) + desp, 0, 255).astype(np.uint8)
+            # Ruido gaussiano leve (variabilidad de cámara).
+            if random.random() < 0.3:
+                img = np.clip(img.astype(np.float32) + np.random.randn(*img.shape) * 6,
+                              0, 255).astype(np.uint8)
+        return np.ascontiguousarray(img), np.ascontiguousarray(ann)
 
     def __getitem__(self, idx: int):
         img, ann = self._cargar(idx)
@@ -131,6 +147,37 @@ class DFUTissueSeg(Dataset):
         x = torch.from_numpy(np.ascontiguousarray(x.transpose(2, 0, 1)))
         y = torch.from_numpy(np.ascontiguousarray(ann))
         return x, y
+
+
+def _escalar_recortar(img: np.ndarray, ann: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
+    """Zoom aleatorio: reescala imagen+máscara por un factor 0.8-1.2 y recorta/rellena
+    al tamaño original. Da robustez ante distancia de cámara sin cambiar la resolución."""
+    from PIL import Image as _Im
+    h, w = ann.shape
+    f = 0.8 + random.random() * 0.4
+    nh, nw = max(8, int(h * f)), max(8, int(w * f))
+    im = np.asarray(_Im.fromarray(img).resize((nw, nh), _Im.BILINEAR))
+    an = np.asarray(_Im.fromarray(ann.astype(np.uint8)).resize((nw, nh), _Im.NEAREST)).astype(np.int64)
+    out_i = np.zeros((h, w, 3), np.uint8)
+    out_a = np.zeros((h, w), np.int64)
+    y0 = random.randint(0, max(0, nh - h)); x0 = random.randint(0, max(0, nw - w))
+    dy = random.randint(0, max(0, h - nh)); dx = random.randint(0, max(0, w - nw))
+    ch, cw = min(h, nh), min(w, nw)
+    out_i[dy:dy + ch, dx:dx + cw] = im[y0:y0 + ch, x0:x0 + cw]
+    out_a[dy:dy + ch, dx:dx + cw] = an[y0:y0 + ch, x0:x0 + cw]
+    return out_i, out_a
+
+
+def pesos_sobremuestreo(ds: "DFUTissueSeg", clases_raras=(1,), factor: float = 3.0) -> list:
+    """Peso por imagen para un WeightedRandomSampler: las imágenes que contienen
+    alguna de `clases_raras` (por defecto Fibrina) se muestrean `factor` veces más.
+    Compensa el fuerte desbalance (la fibrina ocupa <1 % de los píxeles)."""
+    pesos = []
+    for i in range(len(ds)):
+        _, ann = ds._cargar(i)
+        presentes = set(int(c) for c in np.unique(ann))
+        pesos.append(factor if presentes & set(clases_raras) else 1.0)
+    return pesos
 
 
 def prevalencia(split_o_dataset) -> dict:
