@@ -1,461 +1,166 @@
-# 🧬 Co-MIL: Continual Multiple Instance Learning para Úlceras de Pie Diabético
+# 🧬 Co-MIL — Análisis de tejidos en úlceras de pie diabético
 
 ![Python](https://img.shields.io/badge/Python-3.9%2B-blue?style=for-the-badge&logo=python&logoColor=white)
 ![PyTorch](https://img.shields.io/badge/PyTorch-2.0%2B-EE4C2C?style=for-the-badge&logo=pytorch&logoColor=white)
-![TorchMIL](https://img.shields.io/badge/TorchMIL-Standard-28a745?style=for-the-badge)
+![segmentation--models--pytorch](https://img.shields.io/badge/smp-0.5-28a745?style=for-the-badge)
 ![License](https://img.shields.io/badge/License-MIT-gray?style=for-the-badge)
 ![UNAM](https://img.shields.io/badge/UNAM-Facultad_de_Ciencias-C9A51F?style=for-the-badge)
 
-**Proyecto de Práctica Profesional Supervisada (PPS)**  
-**Autor:** Adrián Emiliano Beltrán Fernández  
-**Institución:** Facultad de Ciencias, UNAM
+**Autor:** Adrián Emiliano Beltrán Fernández · Estudiante de Física Biomédica, Facultad de Ciencias, UNAM
+**Tutor:** Dr. José Eduardo Chairez Veloz · Facultad de Ciencias, UNAM
+**Marco:** proyecto derivado de PAPIIT IN115825 — *Innovaciones tecnológicas en la evaluación
+oportuna y el manejo de lesiones en pie diabético*
+
+> **Estado:** 🟡 en desarrollo · última actualización **2 de septiembre de 2026**
+> El proyecto cambió de estrategia en la reunión del 27 de agosto de 2026 (de anotación débil por
+> cajas a **anotación densa** por contorno de tejido). El registro completo está en la
+> [bitácora](#-documentos-clave).
 
 ---
 
-## 📖 Descripción General
+## 📖 Objetivo
 
-Este repositorio contiene la implementación oficial de **Co-MIL**, un framework de Aprendizaje Profundo diseñado para la **clasificación débilmente supervisada y localización espacial** de tejidos patológicos (Granulación, Fibrina, Callo, etc.) en imágenes clínicas de **Úlceras de Pie Diabético (UPD)**.
+Desarrollar y evaluar modelos para la **clasificación y localización de tejidos** (granulación,
+fibrina, callo, necrótico, piel perilesional) en fotografías clínicas de úlceras de pie diabético,
+con tres énfasis:
 
-### 🎯 Problema Resuelto
+1. **Eficiencia de anotación** — cuántas máscaras densas hacen falta realmente, frente a etiquetas
+   débiles baratas.
+2. **Aprendizaje continuo** — integrar lotes de datos que llegan en el tiempo sin olvido catastrófico
+   (el componente que da nombre al proyecto, *Co*-MIL).
+3. **Viabilidad embebida** — modelos ligeros (MobileNetV2) para dispositivos de bajo consumo.
 
-El sistema aborda el **cuello de botella de la anotación densa a nivel de píxel** mediante el paradigma **MIML (Multi-Instance Multi-Label)**:
-
-- **Entrada:** Anotación global de la úlcera por expertos clínicos (sin segmentación píxel a píxel)
-- **Salida:** Mapas de Activación de Clase (CAMs) que localizan automáticamente cada tejido en la imagen
-
-Esto reduce drasticamente el tiempo de anotación manteniendo la capacidad de localización espacial.
-
----
-
-## ⚡ Características Arquitectónicas
-
-### 🔹 Extracción Agnóstica a la Resolución
-El sistema procesa imágenes clínicas en bruto (VGA a 12MP+) sin comprimir la imagen original, preservando gradientes biológicos a nivel celular.
-
-### 🔹 Paradoja del Zero-Padding Resuelta
-Implementa algoritmos de **Smart Crop** y **Reflection Padding** para expansión de ROI, eliminando bordes geométricos artificiales que podrían confundir a la red neuronal.
-
-### 🔹 Atención MIML de K-Ramas
-El mecanismo **Gated Attention** genera `K` mapas de calor independientes (uno por cada tejido anotado dinámicamente), habilitando la transición a Segmentación Semántica Débilmente Supervisada (WSSS).
-
-### 🔹 Protección de Backbone en RAM
-Interpola dinámicamente parches de alta densidad (ej. 56px) a la resolución operativa de **MobileNetV2** (224px), optimizando VRAM y viabilizando despliegue en dispositivos Edge.
-
-### 🔹 Mitigación de Sesgo Tisular
-Implementa cálculo dinámico de `pos_weight` para Entropía Cruzada Binaria, forzando convergencia en clases minoritarias (tejidos raros en las muestras clínicas).
+El proyecto se sostiene sobre un núcleo computacional (arquitecturas, funciones de pérdida,
+evaluación) acorde con un perfil de física biomédica, y sobre un conjunto de datos regional mexicano
+en construcción.
 
 ---
 
-## 📂 Estructura del Repositorio
+## 🧭 Planteamiento (reformulado, sep-2026)
+
+De una **anotación densa** (contorno de cada tejido) se derivan de forma automática todas las
+versiones más simples de etiqueta. Tres brazos de entrenamiento las consumen, y los tres se evalúan
+de forma idéntica contra las máscaras:
+
+| Brazo | Anota el humano | Rol |
+| :--- | :--- | :--- |
+| **Supervisado** | contorno de cada tejido en cada foto | cota alta; segmentación semántica ligera (FPN + MobileNetV2) |
+| **Débil (MIL)** | solo *qué tejidos hay* en la foto | anotación barata; mecanismo de atención / CAM |
+| **Mixto** | pocas máscaras densas + muchas etiquetas | la pregunta central: la curva Dice vs. nº de máscaras |
+
+Encima, el **aprendizaje continuo** re-entrena el modelo conforme llegan lotes; al final se exporta a
+ONNX y se mide la latencia. Diagrama completo: `documentación/figuras/fig_proyecto_reformulado.png`.
+
+---
+
+## 📊 Resultados preliminares (sobre DFUTissue, dataset público)
+
+Mientras se anota el conjunto mexicano, el modelado se adelanta sobre **DFUTissue** (110 imágenes,
+3 tejidos, partición oficial).
+
+**Brazo supervisado (T2)** — FPN + MobileNetV2, 4.2 M de parámetros:
+
+| Tejido | Dice (este trabajo) | Dice (grupo, Maldonado-Oclica *et al.* 2025) |
+| :--- | ---: | ---: |
+| Granulación | **0.874** | 0.786 |
+| Tejido calloso | **0.712** | 0.515 |
+| Fibrina | **0.455** | 0.333 |
+| **Media** | **0.680** | 0.545 |
+
+**Frontera de eficiencia de anotación (T3/T4, preliminar, 1 semilla):** con supervisión puramente
+débil el modelo no localiza (Dice 0.07); con ~10 máscaras densas (13 % de las imágenes) se recupera
+~80 % del desempeño de la supervisión densa completa. Curva:
+`documentación/figuras/fig_curva_eficiencia_dfutissue.png`. Se está recalculando con varias semillas
+y una ablación de supervisión débil en GPU.
+
+*(Los conjuntos de prueba no son idénticos a los del trabajo previo; la comparación es indicativa.)*
+
+---
+
+## 📂 Estructura del repositorio
 
 ```
 CO-MIL/
-├── generador_bolsas.py           # 🖱️  Herramienta interactiva de etiquetado
-├── reprocesador_dataset.py        # ⚙️  Redimensionamiento masivo de bolsas
-├── inspector_bolsas.py             # 🔍 Auditoría visual de tensores
-├── validar_flujo_visual.py         # 📊 Validación de mapas de atención
-├── dataset.py                      # 📦 Ingesta de datos (Dataset MIML)
-├── entrenar_comil.py               # 🚀 Motor de optimización (Fase 1)
-├── evaluar_comil.py                # 📈 Diagnóstico y métricas (Fase 2)
-├── Models/
-│   ├── attention_mil.py            # 🧠 Arquitectura Co-MIL completa
-│   └── __init__.py
-├── Data/                           # Carpeta para datos de entrada
-└── requirements.txt                # Dependencias del proyecto
+├── segmentacion/                  # ← trabajo actual (post-pivote)
+│   ├── descargar_datos.py         #   descarga reproducible de DFUTissue / WoundTissue
+│   ├── dataset_seg.py             #   ingesta de DFUTissue (imagen + máscara)
+│   ├── entrenar_seg.py            #   brazo supervisado (FPN / Unet++ / SegFormer; Dice / Tversky / Focal)
+│   ├── entrenar_eficiencia.py     #   brazos débil y mixto; barrido de la curva de eficiencia
+│   └── colab_estudio_dfutissue.ipynb   #   los tres experimentos en GPU (Colab)
+│
+├── attention_mil.py  · Models/    # pipeline MIL original (brazo débil); se conserva
+├── dataset.py · entrenar_comil.py · evaluar_comil.py · ...
+├── catalogo_tejidos.py            # catálogo canónico y resolución de etiquetas
+├── generador_bolsas.py            # herramienta de anotación por cajas (en desuso tras el pivote)
+└── refinamiento_crf.py            # refinamiento DenseCRF de mapas de atención
+
+documentación/
+├── co_mil_bitacora.pdf · _parte2.pdf · _parte3.pdf   # bitácora I–III
+├── co_mil_bitacora_parte4.tex/.pdf                   # bitácora IV (actual)
+├── propuesta_dataset_tejidos_UPD.pdf                 # propuesta de anotación para el equipo clínico
+├── Plan_PPS.pdf · Manual_usuario_COMIL.pdf
+└── figuras/                                          # todas las figuras, vectoriales
+
+Pesos_Entrenados/                  # metadatos de cada experimento (los .pth no se versionan)
 ```
-
-### Descripción Detallada de Módulos
-
-| Archivo | Tipo | Descripción |
-| :--- | :--- | :--- |
-| `generador_bolsas.py` | 🖱️ UI Interactivo | Herramienta clínica con GUI para aislar ROI, etiquetar tejidos y serializar tensores de 224×224 px en archivos `.pt`. |
-| `reprocesador_dataset.py` | ⚙️ Motor Headless | Redimensiona masivamente bolsas a resoluciones microscópicas (ej. 56×56 px) heredando coordenadas del experto. |
-| `inspector_bolsas.py` | 🔍 Debugger Visual | Auditoría matemática que renderiza tensores, valida malla MIL y expone metadatos. |
-| `validar_flujo_visual.py` | 📊 Validador WSSS | Genera los `K` mapas de atención independientes sobre topología real de úlcera. |
-| `dataset.py` | 📦 Ingesta de Datos | Clase `CoMILDataset` adaptada a `torchmil.data.collate_fn` con protección geométrica. |
-| `Models/attention_mil.py` | 🧠 Arquitectura | Implementación POO: *InstanceEncoder*, *AttentionAggregator*, *BagClassifier*. |
-| `entrenar_comil.py` | 🚀 Motor de Opt. | Script maestro de entrenamiento con autodetección de clases y pesos compensatorios. |
-| `evaluar_comil.py` | 📈 Diagnóstico | Calcula Hamming Loss, matrices de confusión MIML y métricas clínicas. |
 
 ---
 
-## ⚙️ Instalación y Requisitos
+## 📄 Documentos clave
 
-### Requisitos del Sistema
+| Documento | Para qué |
+| :--- | :--- |
+| [`documentación/co_mil_bitacora_parte4.pdf`](documentación/co_mil_bitacora_parte4.tex) | **Empezar aquí.** Registro del pivote, la investigación de estado del arte, el planteamiento reformulado y los resultados T1–T4. |
+| [`documentación/propuesta_dataset_tejidos_UPD.pdf`](documentación/propuesta_dataset_tejidos_UPD.tex) | Propuesta de las 5 clases de tejido y el protocolo de anotación densa, para el equipo médico y la ENEO. |
+| `documentación/co_mil_bitacora.pdf` · `_parte2.pdf` · `_parte3.pdf` | Registro previo (marzo–agosto de 2026): marco teórico, experimentación MIL, auditoría y primer PoC válido. |
 
-- **Python:** 3.9 o superior
-- **CUDA:** Opcional pero recomendado para GPU (NVIDIA)
-- **Memoria RAM:** Mínimo 8GB (16GB recomendado para procesamiento de imágenes de alta resolución)
+---
 
-### Instalación Local
+## ⚙️ Reproducir los experimentos
+
+**En GPU (recomendado):** abrir `CO-MIL/segmentacion/colab_estudio_dfutissue.ipynb` en Google Colab
+con GPU T4 y ejecutar las celdas. El notebook clona este repositorio, descarga DFUTissue y guarda los
+resultados en Google Drive.
+
+**Localmente:**
 
 ```bash
-# 1. Clonar el repositorio
-git clone https://github.com/adrianBeltrn/co_mil_pps.git
-cd co_mil_pps
-
-# 2. Crear entorno virtual
-python -m venv env
-# En Windows:
-env\Scripts\activate
-# En macOS/Linux:
-source env/bin/activate
-
-# 3. Instalar dependencias
-pip install --upgrade pip
-pip install -r CO-MIL/requirements.txt
-```
-
-### Instalación con Anaconda
-
-```bash
-conda create -n comil python=3.9
-conda activate comil
-cd CO-MIL
-pip install -r requirements.txt
-```
-
-### Verificar Instalación
-
-```bash
-python -c "import torch; print(f'PyTorch: {torch.__version__}')"
-python -c "import torchmil; print('TorchMIL instalado correctamente')"
+python -m pip install -r CO-MIL/requirements.txt segmentation-models-pytorch
+python CO-MIL/segmentacion/descargar_datos.py          # baja DFUTissue a datasets_publicos/
+python CO-MIL/segmentacion/entrenar_seg.py             # brazo supervisado (baseline)
+python CO-MIL/segmentacion/entrenar_eficiencia.py \
+    --modos mixto,solo_supervisado --semillas 42,1,7   # curva de eficiencia + ablación
 ```
 
 ---
 
-## 🚀 Guía Rápida de Uso
+## 🗓️ Próximos pasos
 
-### Flujo Típico del Proyecto
-
-```mermaid
-graph TD
-    A["📷 Imágenes Clínicas<br/>Crudas"]
-    B["🖱️ Etiquetado<br/>Interactivo<br/>generador_bolsas.py"]
-    C["📦 Bolsas MIML<br/>224×224 px"]
-    D["⚙️ Redimensionamiento<br/>Opcional<br/>reprocesador_dataset.py"]
-    E["🔍 Auditoría<br/>inspector_bolsas.py"]
-    F["✓ Validación<br/>de Integridad"]
-    G["🚀 Entrenamiento<br/>Fase 1<br/>entrenar_comil.py"]
-    H["🧠 Modelo<br/>Entrenado"]
-    I["📊 Visualización<br/>validar_flujo_visual.py"]
-    J["📈 Evaluación<br/>evaluar_comil.py"]
-    K["✅ Heatmaps<br/>CAM"]
-    L["📋 Métricas<br/>MIML"]
-    
-    A --> B
-    B --> C
-    C --> D
-    D --> C
-    C --> E
-    E --> F
-    F --> G
-    G --> H
-    H --> I
-    I --> K
-    H --> J
-    J --> L
-    
-    style A fill:#e1f5ff,stroke:#01579b,stroke-width:2px
-    style B fill:#fff3e0,stroke:#e65100,stroke-width:2px
-    style C fill:#f3e5f5,stroke:#4a148c,stroke-width:2px
-    style G fill:#fff3e0,stroke:#e65100,stroke-width:2px
-    style H fill:#f3e5f5,stroke:#4a148c,stroke-width:2px
-    style K fill:#e8f5e9,stroke:#1b5e20,stroke-width:2px
-    style L fill:#e8f5e9,stroke:#1b5e20,stroke-width:2px
-```
+- **Semana del 8-sep:** sesión con la Escuela Nacional de Enfermería y Obstetricia (ENEO) para fijar
+  el catálogo de 5 clases y los criterios de anotación densa.
+- Curva de eficiencia con varias semillas + ablación de supervisión débil (en curso, GPU).
+- Anotación densa del conjunto mexicano (~60–270 imágenes) en MATLAB Image Labeler.
+- Prototipo del componente de aprendizaje continuo (búfer de repetición).
+- Validación de transferencia entre poblaciones (México ↔ DFUTissue).
+- Factibilidad embebida: exportación a ONNX y medición de latencia.
 
 ---
 
-## 📋 Flujo de Trabajo Detallado
+## 📚 Trabajo previo del grupo
 
-### **Fase A: Preparación de Datos (Clínica)**
-
-#### 1️⃣ Anotación Débil Interactiva
-```bash
-python CO-MIL/generador_bolsas.py
-```
-
-**Qué hace:**
-- Abre interfaz gráfica para cargar imágenes crudas
-- Permite trazar el contorno de la úlcera (ROI)
-- Permite marcar los tejidos presentes: Granulación, Fibrina, Callo, etc.
-- Genera tensor `.pt` con estructura:
-  ```python
-  {
-    'X': torch.Tensor,         # [N_parches, 3, 224, 224]
-    'Y': torch.Tensor,         # [num_clases] vector multietiqueta binario
-    'grid_shape': tuple,       # (rows, cols) para reconstrucción espacial
-    'metadata': {...}          # timestamp, nombre original, etc.
-  }
-  ```
-
-#### 2️⃣ (Opcional) Densificación Multi-resolución WSSS
-```bash
-python CO-MIL/reprocesador_dataset.py
-```
-
-**Qué hace:**
-- Redimensiona bolsas a resoluciones microscópicas (56×56, 112×112 px)
-- Pruebas de análisis más fino de patologías
-- Crea subcarpetas `56px/`, `112px/` en `Bolsas_MIL_Procesadas/`
-
-#### 3️⃣ Auditoría y Validación
-```bash
-python CO-MIL/inspector_bolsas.py
-```
-
-**Qué hace:**
-- Renderiza cada tensor `.pt` en visualización
-- Valida que la malla MIL sea correcta
-- Detecta anomalías: Zero-Padding, dimensiones inconsistentes
-- Exporta reportes de integridad
+Maldonado-Oclica A., Rios-López R., **Beltrán-Fernández A.**, *et al.* (2025).
+*AI-based Mobile App for Segmentation and Tissue Classification on Diabetic Foot Ulcer: A Step
+Forward in Patient Care.* Springer. DOI: 10.1007/978-3-031-95841-0_47.
 
 ---
 
-### **Fase B: Optimización y Evaluación (Computacional)**
+## 📧 Contacto
 
-#### 4️⃣ Entrenamiento del Modelo
-```bash
-python CO-MIL/entrenar_comil.py
-```
-
-**Qué hace:**
-- Autodetecta cantidad de clases (dinámico según datos)
-- Calcula pesos compensatorios (`pos_weight`) para clases desbalanceadas
-- Congela backbone de MobileNetV2 (protege pesos ImageNet)
-- Optimiza cabezal MIML con BCE ponderada
-- Guarda mejor modelo en `Pesos_Entrenados/comil_miml_fase1.pth`
-
-**Configuración disponible:**
-- `BATCH_SIZE`: Tamaño de lote (default: 4)
-- `LEARNING_RATE`: Tasa de aprendizaje (default: 1e-4)
-- `NUM_EPOCHS`: Épocas de entrenamiento (default: 50)
-- `DISPOSITIVO`: "cuda" o "cpu" (autodetectado)
-
-#### 5️⃣ Validación de Mapas WSSS
-```bash
-python CO-MIL/validar_flujo_visual.py
-```
-
-**Qué hace:**
-- Genera mapas de atención K-independientes
-- Renderiza heatmaps sobrepuestos a imagen original
-- Valida que la red enfoque en regiones clínicamente relevantes
-- Exporta PNG para inspección visual
-
-#### 6️⃣ Evaluación Cuantitativa
-```bash
-python CO-MIL/evaluar_comil.py
-```
-
-**Qué hace:**
-- Calcula **Hamming Loss** (error promedio por clase)
-- Calcula **Subset Accuracy** (exactitud exacta multietiqueta)
-- Genera **Matrices de Confusión** por cada tejido
-- Exporta reportes PDF con métricas clínicas
-
----
-
-## 📐 Formalización Matemática
-
-### Mecanismo de Atención (Gated Attention)
-
-El sistema evalúa la relevancia clínica de cada parche mediante un sistema de compuertas probabilísticas:
-
-$$\alpha_{i}^{k} = \frac{\exp(w_k^T(\tanh(Vh_i^T) \odot \sigma(Uh_i^T)))}{\sum_{j=1}^{N}\exp(w_k^T(\tanh(Vh_j^T) \odot \sigma(Uh_j^T)))}$$
-
-**Parámetros:**
-- $\alpha_i^k$: Peso de atención del parche $i$ para la clase $k$ (tejido)
-- $h_i$: Vector de características del parche $i$ (1280-D desde MobileNetV2)
-- $V, U$: Matrices de transformación lineal de dimensión $D \times L$
-- $\odot$: Producto elemento a elemento (Hadamard)
-- $\sigma(\cdot)$: Función sigmoide
-- $\tanh(\cdot)$: Tangente hiperbólica
-
----
-
-### Función de Pérdida Multi-Etiqueta Ponderada
-
-La optimización de las $K$ ramas independientes se realiza usando Entropía Cruzada Binaria ponderada por clase:
-
-$$\mathcal{L} = -\sum_{c=1}^{K} w_c [y_c \log(\sigma(z_c)) + (1 - y_c) \log(1 - \sigma(z_c))]$$
-
-**Parámetros:**
-- $w_c$: Peso compensatorio para la clase $c$ (inversamente proporcional a frecuencia de positivos)
-- $y_c \in \{0,1\}$: Etiqueta binaria del tejido $c$ en la bolsa
-- $z_c$: Logit predicho para la clase $c$ (salida del clasificador)
-- $K$: Número total de clases (tejidos) en el dataset
-
-**Cálculo dinámico de pesos:**
-
-$$w_c = \frac{N_{total}}{N_{positivos}^c}$$
-
-Donde $N_{total}$ es el total de muestras y $N_{positivos}^c$ es la cantidad de muestras positivas para la clase $c$.
-
----
-
-### Reconstrucción de Mapas de Activación (CAM)
-
-Para visualización clínica, los pesos de atención se proyectan a la resolución espacial original:
-
-$$CAM_k(x,y) = Resize(\sum_{i=1}^{N} \alpha_i^k \cdot M_i(x,y), res_{original})$$
-
-Donde M_i(x,y) es la máscara espacial que indica la región del parche i en la imagen original, y res_original es la resolución de la imagen clínica.
-
----
-
-## 🔬 Casos de Uso y Ejemplos
-
-### Ejemplo 1: Entrenamiento Rápido en Google Colab
-
-Para evitar limitaciones de GPU local, el proyecto está optimizado para Google Colab:
-
-```python
-# En Google Colab (primera celda)
-from google.colab import drive
-drive.mount('/content/drive')
-!pip install torchmil
-
-# Segunda celda
-%cd "/content/drive/MyDrive/Co_MIL_PPS"
-!python CO-MIL/entrenar_comil.py
-```
-
-Los pesos se guardan automáticamente en Google Drive.
-
-### Ejemplo 2: Evaluación en Nuevo Conjunto de Datos
-
-```python
-# dataset.py se puede reutilizar
-from CO_MIL.dataset import CoMILDataset
-from torch.utils.data import DataLoader
-
-dataset = CoMILDataset(pt_folder="ruta/a/nuevas/bolsas", target_size=224)
-dataloader = DataLoader(dataset, batch_size=4, shuffle=False, collate_fn=collate_fn)
-
-# Iterar sobre bolsas MIML
-for bag_X, bag_Y in dataloader:
-    print(f"Bolsa: {bag_X.shape}, Etiquetas: {bag_Y.shape}")
-```
-
----
-
-## 🔧 Solución de Problemas
-
-### ❌ "ModuleNotFoundError: No module named 'torchmil'"
-```bash
-pip install --upgrade torchmil
-```
-
-### ❌ "CUDA out of memory"
-Reducir tamaño de batch en `entrenar_comil.py`:
-```python
-BATCH_SIZE = 2  # Reducir de 4 a 2
-```
-
-### ❌ "No se encuentran archivos .pt en la carpeta"
-Verificar que `generador_bolsas.py` se ejecutó correctamente:
-```bash
-python CO-MIL/inspector_bolsas.py  # Auditar bolsas existentes
-```
-
-### ❌ Los mapas de atención no convergen a regiones clínicas
-Verificar:
-1. Anotaciones débiles correctas en `generador_bolsas.py`
-2. `pos_weight` se calcula automáticamente (revisar terminal durante entrenamiento)
-3. Aumentar `NUM_EPOCHS` o reducir `LEARNING_RATE`
-
----
-
-## 📊 Estructura de Salidas
-
-### Estructura de Carpetas Generadas
-
-```
-Pesos_Entrenados/
-└── comil_miml_fase1.pth           # Modelo entrenado
-
-Bolsas_MIL_Procesadas/
-├── 224px/
-│   ├── imagen1_bag.pt
-│   └── imagen2_bag.pt
-└── 56px/                           # Opcional (multiresolución)
-    └── ...
-
-Resultados/
-├── heatmaps_validacion/           # Mapas CAM generados
-└── metricas_evaluacion.json        # Reporte cuantitativo
-```
-
-### Formato de Archivo `.pt`
-
-Cada archivo `.pt` es un diccionario Python serializado con:
-```python
-{
-    'X': torch.Tensor              # Shape: [N, 3, 224, 224] (N = parches en bolsa)
-    'Y': torch.Tensor              # Shape: [num_clases] (valores 0 o 1)
-    'grid_shape': (rows, cols),    # Para reconstrucción espacial
-    'metadata': {
-        'timestamp': str,
-        'imagen_original': str,
-        'roi_coords': [(x1, y1, x2, y2)]
-    }
-}
-```
-
----
-
-## 🤝 Flujo de Colaboración Clínica-Computacional
-
-Este proyecto implementa un ciclo iterativo:
-
-1. **Clínico (Semana 1):** Genera 50 bolsas etiquetadas con `generador_bolsas.py`
-2. **Ingeniero (Semana 2):** Entrena modelo con `entrenar_comil.py` en GPU
-3. **Validación (Semana 2):** Ejecuta `validar_flujo_visual.py` para inspecionar localizaciones
-4. **Feedback (Semana 3):** Clínico revisa heatmaps y refina anotaciones
-5. **Iteración:** Volver a paso 1 con datos mejorados
-
----
-
-## 📚 Referencias Académicas
-
-Este trabajo se basa en los siguientes paradigmas:
-
-- **Multiple Instance Learning (MIL):** Dietterich, T. G., et al. (1997). "Solving the Multiple Instance Problem with Axis-Parallel Rectangles"
-- **Multi-Label Learning:** Sorower, M. S. (2010). "A Literature Survey on Algorithms for Multi-Label Learning"
-- **Weakly Supervised Segmentation (WSSS):** Hong, S., et al. (2015). "Learning Deep Features for Discriminative Localization"
-- **Medical Image Analysis:** Ronneberger, O., et al. (2015). "U-Net: Convolutional Networks for Biomedical Image Segmentation"
-
----
-
-## 🚀 Trabajo a Futuro
-
-Este proyecto se encuentra en **desarrollo activo**. Las próximas fases incluyen:
-
-- ✅ **Integración de Búfer de Repetición** para Aprendizaje Continuo Real (Co-MIL)
-- ✅ **Refinamiento Espacial** de mapas mediante DenseCRF para cuantificación nanométrica en cm²
-- ✅ **Modelo Clínico Embarcado** (ONNX) para tablets y dispositivos móviles
-- ✅ **Arquitecturas Alternativas** (Vision Transformers, YOLO-MIL hybrid)
-- ✅ **Base de Datos Multicéntrica** con datos de clínicas colaboradoras
-
----
+**Adrián Emiliano Beltrán Fernández** — adrian_beltran@ciencias.unam.mx
+Facultad de Ciencias, UNAM.
 
 ## 📄 Licencia
 
-Este proyecto está bajo licencia **MIT**. Ver archivo `LICENSE` para detalles.
-
----
-
-## 📧 Contacto y Contribuciones
-
-**Autor:** Adrián Emiliano Beltrán Fernández  
-**Institución:** Facultad de Ciencias, UNAM  
-**Correo:** [adrian_beltran@ciencias.unam.mx]
-
-Para reportar bugs o sugerir mejoras, por favor abre un **Issue** o **Pull Request** en el repositorio.
-
----
-
-**Actualizado:** Abril 2026  
-**Estado del Proyecto:** 🟡 En desarrollo
+Código bajo licencia **MIT** (ver [`LICENSE`](LICENSE)). Los conjuntos de datos públicos que se
+descargan a `datasets_publicos/` conservan su propia licencia y no se redistribuyen en este
+repositorio.
