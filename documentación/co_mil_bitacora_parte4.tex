@@ -264,8 +264,22 @@ licencia CC BY-NC-SA 4.0) se solicita a los autores por correo.
 
 Se entrenó un modelo \textbf{FPN con extractor MobileNetV2} (4.2\,M de parámetros, pensado para
 despliegue embebido), preentrenado en ImageNet, con pérdida Dice + entropía cruzada, sobre las 78
-imágenes de entrenamiento de DFUTissue; 122 épocas, $\sim$46\,min en CPU. Resultado sobre las 16
-imágenes de prueba oficiales:
+imágenes de entrenamiento de DFUTissue; 122 épocas, $\sim$46\,min en CPU. La
+Figura~\ref{fig:arquitectura} detalla la arquitectura, incluyendo la segunda cabeza de supervisión
+débil que se usa en el brazo mixto (T3/T4). Resultado sobre las 16 imágenes de prueba oficiales:
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=\textwidth]{figuras/fig_arquitectura_segmentacion.png}
+\caption{Arquitectura del modelo de segmentación de tejidos. El extractor MobileNetV2 (inicializado
+en ImageNet) produce características a cuatro escalas; el decodificador FPN las fusiona y genera un
+mapa de logits de $4\times256\times256$. De ese mapa parten dos cabezas: la \emph{densa} (softmax +
+argmax, con pérdida Dice + entropía cruzada frente a la máscara) y la \emph{débil} (agrupación
+log-sum-exp por clase, con entropía cruzada binaria frente a la etiqueta de imagen). Un único modelo
+se entrena con ambas señales: las $N$ imágenes con máscara supervisan la cabeza densa y las $78-N$
+con solo etiqueta, la débil.}
+\label{fig:arquitectura}
+\end{figure}
 
 \begin{table}[H]
 \centering
@@ -382,13 +396,14 @@ $N$ & Fibrina & Granulación & Callo & Media \\
 
 Figuras ya generadas para esta parte y para la propuesta clínica, todas versionadas en
 \texttt{documentación/figuras/} y construidas con \texttt{matplotlib} a partir del código real:
+\texttt{fig\_arquitectura\_segmentacion} (nivel publicación, Figura~\ref{fig:arquitectura}),
 \texttt{fig\_proyecto\_reformulado}, \texttt{fig\_supervision\_mixta},
 \texttt{fig\_curva\_eficiencia\_dfutissue}, \texttt{fig\_esquema\_5\_tejidos},
-\texttt{fig\_debil\_vs\_fuerte}, \texttt{fig\_flujo\_anotacion}. Pendiente: actualizar el diagrama de
-arquitectura del modelo (\texttt{fig\_arquitectura\_modelo}, hoy muestra la red MIML de $K$ ramas) y
-el del pipeline (\texttt{fig\_pipeline\_estado\_actual}) para reflejar los tres brazos y la anotación
-densa. El diagrama del mecanismo de atención (\texttt{fig\_mecanismo\_atencion\_mil}) se conserva:
-sigue siendo válido para describir el brazo débil.
+\texttt{fig\_debil\_vs\_fuerte}, \texttt{fig\_flujo\_anotacion}. Pendiente: actualizar el diagrama del
+pipeline de desarrollo (\texttt{fig\_pipeline\_estado\_actual}) para reflejar los tres brazos y la
+anotación densa. El diagrama antiguo de arquitectura (\texttt{fig\_arquitectura\_modelo}, red MIML de
+$K$ ramas) y el del mecanismo de atención (\texttt{fig\_mecanismo\_atencion\_mil}) se conservan como
+referencia del brazo débil.
 
 \section{Decisiones tomadas (para no reabrir la discusión)}
 
