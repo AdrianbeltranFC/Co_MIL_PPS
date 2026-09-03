@@ -1,0 +1,199 @@
+{
+  "config": {
+    "mascaras": "0,5,10,20,40,78",
+    "epocas": 120,
+    "batch": 8,
+    "lr": 0.0001,
+    "paciencia": 28,
+    "semilla": 42
+  },
+  "dispositivo": "cpu",
+  "resultados": [
+    {
+      "n_mascaras": 0,
+      "epocas_corridas": 89,
+      "mejor_epoca": 61,
+      "minutos": 24.3,
+      "test": {
+        "dice_por_clase": {
+          "Fondo": 0.4417799073372502,
+          "Fibrina": 0.0,
+          "Granulación": 0.0001221292359943937,
+          "Callo": 0.19896037007010348
+        },
+        "iou_por_clase": {
+          "Fondo": 0.28351573017026027,
+          "Fibrina": 0.0,
+          "Granulación": 6.106834711248499e-05,
+          "Callo": 0.11046973468198909
+        },
+        "clase_presente_en_gt": {
+          "Fondo": true,
+          "Fibrina": true,
+          "Granulación": true,
+          "Callo": true
+        },
+        "dice_medio_tejidos": 0.06636083310203263,
+        "iou_medio_tejidos": 0.03684360100970053,
+        "dice_medio_por_imagen": 0.0566622914922789,
+        "dice_std_por_imagen": 0.039139950340329834
+      },
+      "val_dice_tejidos": 0.05523265264952884
+    },
+    {
+      "n_mascaras": 5,
+      "epocas_corridas": 61,
+      "mejor_epoca": 33,
+      "minutos": 18.2,
+      "test": {
+        "dice_por_clase": {
+          "Fondo": 0.976690117312683,
+          "Fibrina": 0.07193204409904211,
+          "Granulación": 0.7571916254864045,
+          "Callo": 0.5622533451345864
+        },
+        "iou_por_clase": {
+          "Fondo": 0.954442182018016,
+          "Fibrina": 0.03730783652043495,
+          "Granulación": 0.6092585478294276,
+          "Callo": 0.3910656604429509
+        },
+        "clase_presente_en_gt": {
+          "Fondo": true,
+          "Fibrina": true,
+          "Granulación": true,
+          "Callo": true
+        },
+        "dice_medio_tejidos": 0.46379233824001104,
+        "iou_medio_tejidos": 0.34587734826427113,
+        "dice_medio_por_imagen": 0.3976251677907825,
+        "dice_std_por_imagen": 0.17181844815063793
+      },
+      "val_dice_tejidos": 0.47025363787485736
+    },
+    {
+      "n_mascaras": 10,
+      "epocas_corridas": 120,
+      "mejor_epoca": 97,
+      "minutos": 47.5,
+      "test": {
+        "dice_por_clase": {
+          "Fondo": 0.9785477373790217,
+          "Fibrina": 0.2994141505182515,
+          "Granulación": 0.8094584930655694,
+          "Callo": 0.5541912209549844
+        },
+        "iou_por_clase": {
+          "Fondo": 0.9579965439286743,
+          "Fibrina": 0.17606529573881705,
+          "Granulación": 0.6799078304710887,
+          "Callo": 0.3833087950406819
+        },
+        "clase_presente_en_gt": {
+          "Fondo": true,
+          "Fibrina": true,
+          "Granulación": true,
+          "Callo": true
+        },
+        "dice_medio_tejidos": 0.554354621512935,
+        "iou_medio_tejidos": 0.4130939737501959,
+        "dice_medio_por_imagen": 0.39491227739555834,
+        "dice_std_por_imagen": 0.18000845248515554
+      },
+      "val_dice_tejidos": 0.5398745645024109
+    },
+    {
+      "n_mascaras": 20,
+      "epocas_corridas": 106,
+      "mejor_epoca": 78,
+      "minutos": 42.3,
+      "test": {
+        "dice_por_clase": {
+          "Fondo": 0.9774157217915311,
+          "Fibrina": 0.21314237573715247,
+          "Granulación": 0.7341190142357296,
+          "Callo": 0.5876175385433895
+        },
+        "iou_por_clase": {
+          "Fondo": 0.9558290134324465,
+          "Fibrina": 0.11928335690711929,
+          "Granulación": 0.5799273569090764,
+          "Callo": 0.4160470372432769
+        },
+        "clase_presente_en_gt": {
+          "Fondo": true,
+          "Fibrina": true,
+          "Granulación": true,
+          "Callo": true
+        },
+        "dice_medio_tejidos": 0.5116263095054238,
+        "iou_medio_tejidos": 0.37175258368649083,
+        "dice_medio_por_imagen": 0.4517001701948701,
+        "dice_std_por_imagen": 0.21660921300621186
+      },
+      "val_dice_tejidos": 0.5161760560141634
+    },
+    {
+      "n_mascaras": 40,
+      "epocas_corridas": 72,
+      "mejor_epoca": 44,
+      "minutos": 21.0,
+      "test": {
+        "dice_por_clase": {
+          "Fondo": 0.9796043998598342,
+          "Fibrina": 0.238986238986239,
+          "Granulación": 0.8435631027348476,
+          "Callo": 0.6067922525868931
+        },
+        "iou_por_clase": {
+          "Fondo": 0.9600241315478738,
+          "Fibrina": 0.13570946705644255,
+          "Granulación": 0.7294501798842484,
+          "Callo": 0.4355360883641211
+        },
+        "clase_presente_en_gt": {
+          "Fondo": true,
+          "Fibrina": true,
+          "Granulación": true,
+          "Callo": true
+        },
+        "dice_medio_tejidos": 0.5631138647693265,
+        "iou_medio_tejidos": 0.43356524510160405,
+        "dice_medio_por_imagen": 0.4681121754544102,
+        "dice_std_por_imagen": 0.22897190053900074
+      },
+      "val_dice_tejidos": 0.4880171270700613
+    },
+    {
+      "n_mascaras": 78,
+      "epocas_corridas": 50,
+      "mejor_epoca": 22,
+      "minutos": 13.0,
+      "test": {
+        "dice_por_clase": {
+          "Fondo": 0.9838258611104371,
+          "Fibrina": 0.4958241758241758,
+          "Granulación": 0.8791247966845659,
+          "Callo": 0.7110669633902903
+        },
+        "iou_por_clase": {
+          "Fondo": 0.968166600052945,
+          "Fibrina": 0.32963179427235534,
+          "Granulación": 0.7843199618335785,
+          "Callo": 0.5516709892552797
+        },
+        "clase_presente_en_gt": {
+          "Fondo": true,
+          "Fibrina": true,
+          "Granulación": true,
+          "Callo": true
+        },
+        "dice_medio_tejidos": 0.6953386452996774,
+        "iou_medio_tejidos": 0.5552075817870712,
+        "dice_medio_por_imagen": 0.5992128894720146,
+        "dice_std_por_imagen": 0.19027229498150833
+      },
+      "val_dice_tejidos": 0.6083809639896951
+    }
+  ]
+}
