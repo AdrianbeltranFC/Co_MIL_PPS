@@ -37,7 +37,7 @@
 \large Reformulación metodológica y estudio de eficiencia de anotación}}
 \author{Adrián Emiliano Beltrán Fernández \\ \small Estudiante de Física Biomédica \\ \small Facultad de Ciencias, UNAM \\[1em]
 \small Tutor: Dr.\ José Eduardo Chairez Veloz \\ \small Profesor de Asignatura B, Facultad de Ciencias, UNAM}
-\date{Ciudad de México, 2026 \\ \small Documento vivo --- última actualización: 2 de septiembre de 2026}
+\date{Ciudad de México, 2026 \\ \small Documento vivo --- última actualización: 6 de septiembre de 2026}
 
 \begin{document}
 
@@ -421,6 +421,87 @@ referencia del brazo débil.
     \item Se trabaja sobre el mismo repositorio; los commits del proyecto se hacen sin líneas de
         atribución de herramientas de asistencia.
 \end{itemize}
+
+\section{6 de septiembre de 2026}
+
+\entrada{Estado clínico: sin avance desde el 27 de agosto}{Registro de situación.}
+
+Al 6 de septiembre \textbf{no ha habido ninguna reunión} desde la del 27 de agosto: la sesión con la
+Facultad de Enfermería y Obstetricia (FENO) de la UNAM sigue sin fecha confirmada, y el catálogo de
+cinco tejidos continúa siendo una propuesta sin validar clínicamente. El trabajo de esta semana es,
+por tanto, íntegramente computacional sobre el conjunto de datos público DFUTissue, preparando el
+estudio de eficiencia para poder ejecutarlo en GPU en cuanto haya tiempo de máquina.
+
+\entrada{Filtro de la anotación débil por número de tejidos}{Idea del autor, implementada en
+\texttt{CO-MIL/segmentacion/entrenar\_eficiencia.py} (opción \texttt{--max\_tejidos\_debil}).}
+
+En el brazo mixto, las imágenes sin máscara aportan solo su etiqueta de imagen (qué tejidos
+contienen) a través de la pérdida débil (agrupación log-sum-exp por clase + entropía cruzada
+binaria). Una imagen que contiene los tres tejidos produce la etiqueta $[1,1,1]$: esa pérdida se
+satisface de forma trivial y no obliga al modelo a distinguir nada. Una imagen con un solo tejido
+produce $[1,0,0]$, que sí fuerza a empujar hacia abajo la activación de las otras dos clases en toda
+la imagen --- señal informativa. La hipótesis es que \emph{restringir} el brazo débil a las imágenes
+con pocos tejidos presentes puede dar una señal más útil por imagen, aunque a costa de usar menos
+imágenes.
+
+Se añadió la opción \texttt{--max\_tejidos\_debil k}: en el brazo mixto solo se usan como débiles las
+imágenes sin máscara con $\leq k$ tejidos presentes (una clase «está presente» si ocupa al menos 64
+píxeles, para no contar como tejido una astilla de anotación). Acepta una lista
+(\texttt{none,1,2}) que genera varias curvas en una sola corrida; las $N$ imágenes con máscara nunca
+se filtran. Se comprobó el cableado con una corrida corta y se verificó el conteo real de imágenes
+débiles resultante.
+
+\textbf{Cautela por el tamaño de DFUTissue.} La distribución de tejidos por imagen en el conjunto de
+entrenamiento (78 imágenes) es:
+
+\begin{table}[H]
+\centering
+\caption{Nº de imágenes de entrenamiento de DFUTissue según cuántos tejidos contienen.}
+\begin{tabular}{lr}
+\toprule
+Tejidos presentes en la imagen & Nº de imágenes \\
+\midrule
+1 tejido (Fibrina 3, Granulación 4, Callo 5) & 12 \\
+2 tejidos & 26 \\
+3 tejidos & 40 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+El filtro $\leq 1$ deja como mucho 12 imágenes débiles (y varias caen dentro del subconjunto con
+máscara según la semilla), así que solo es informativo a $N$ bajo (5, 10); el filtro $\leq 2$ deja
+$\sim$38 y es informativo hasta $N \approx 20$. Sobre el conjunto de datos propio, cuyas regiones de
+interés (protocolo v1) suelen abarcar varios tejidos, la situación puede ser distinta.
+
+\entrada{Reestructuración del cuaderno de Colab}{\texttt{CO-MIL/segmentacion/colab\_estudio\_
+dfutissue.ipynb}.}
+
+El experimento 1 pasa a comparar \textbf{cuatro curvas en una sola corrida}: \texttt{solo\_
+supervisado} ($N$ máscaras y nada más), \texttt{mixto} ($N$ máscaras + todas las etiquetas débiles),
+y \texttt{mixto $\leq 1$} / \texttt{mixto $\leq 2$} (con el filtro anterior). La brecha
+\texttt{mixto} $-$ \texttt{solo\_supervisado} mide el valor real de la anotación débil; la brecha
+\texttt{mixto} $-$ \texttt{mixto $\leq k$} mide si conviene filtrarla.
+
+El cuaderno se dividió en bloques (uno por semilla para el experimento 1, más un bloque para los
+experimentos 2 y 3) para que cada uno quepa en una sesión de Colab gratuita ($\sim$75--90\,min en
+T4). El script gana la opción \texttt{--dir\_salida}, que reutiliza una carpeta de resultados y
+\emph{reanuda} el barrido saltando las corridas ya completadas: los tres bloques de semilla escriben
+en la misma carpeta de Google Drive y, si una sesión se corta, basta relanzar la misma celda.
+
+\entrada{Recorte de la región de interés para el brazo débil --- evaluado, pospuesto}{Segunda parte
+de la idea del autor.}
+
+Las imágenes de DFUTissue ya son regiones de interés recortadas (mediana $\sim$134\,px de lado)
+rellenadas a $256\times256$: $\sim$73\,\% del lienzo es relleno y la clase fondo ocupa el 92\,\% de
+los píxeles. Recortar más ajustado reduciría ese fondo irrelevante, pero: (i) es una segunda
+variable que ensucia la curva de eficiencia; (ii) obligaría a re-ejecutar el baseline supervisado
+con el mismo recorte para que la comparación sea limpia; (iii) el fallo de fondo del brazo débil
+--- que la etiqueta de imagen no lleva información espacial --- no lo resuelve un recorte, solo
+reduce holgura a la pérdida log-sum-exp; (iv) rompe la comparabilidad con las cifras publicadas de
+DFUTissue. Se pospone: la prueba natural es sobre el conjunto de datos propio (imágenes con margen
+real de piel sana, protocolo v1), recortando cada imagen de entrenamiento a la caja envolvente de su
+máscara más un margen fijo antes del brazo débil, como ablación de una sola figura cuando haya
+máscaras.
 
 % -----------------------------------------------------------------------------------
 % Plantilla para futuras entradas. Copiar el bloque \entrada{...}{...} según se necesite
