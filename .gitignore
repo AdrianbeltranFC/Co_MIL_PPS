@@ -19,6 +19,11 @@ CO-MIL/custom_classes.json
 # cada uno con su propia licencia; se bajan con CO-MIL/segmentacion/descargar_datos.py
 datasets_publicos/
 
+# Resultados de experimentos descargados de Colab/Drive (JSON, checkpoints, muestras).
+# Las cifras relevantes se registran en la bitacora; el detalle vive en Drive.
+comil_resultados_dfutissue/
+comil_resultados_dfutissue-*.zip
+
 # Excepcion: figuras reales de la bitacora/tesis (no son dataset clinico, son
 # resultados/diagramas que si deben versionarse)
 !documentación/figuras/*.png

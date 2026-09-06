@@ -51,10 +51,10 @@ asesoría clínica del 27 de agosto de 2026 --- pasar de anotación débil por c
 densa (máscaras de tejido)} --- y el trabajo de la primera semana de septiembre: una investigación
 dirigida de estado del arte verificada fuente por fuente, el reencuadre del proyecto en tres brazos
 de supervisión, y un primer estudio computacional sobre el conjunto de datos público DFUTissue que
-establece un baseline supervisado y un resultado preliminar sobre \emph{cuántas máscaras densas hacen
+establece un baseline supervisado y una primera medición de \emph{cuántas máscaras densas hacen
 falta} para localizar tejidos. El catálogo de tejidos y el protocolo de anotación quedan como
-propuesta a confirmar en la sesión con la Escuela Nacional de Enfermería y Obstetricia (ENEO)
-programada para la semana del 8 de septiembre.
+propuesta a confirmar en una sesión con la Facultad de Enfermería y Obstetricia (FENO) de la UNAM,
+aún sin fecha al cierre de esta parte.
 \end{abstract}
 
 \tableofcontents
@@ -97,10 +97,10 @@ observaciones de la reunión:
         veces menor que la entrada), no de la anotación; un mapa puede verse detallado y ser
         incorrecto --- de hecho la primera corrida del rediseño CAM dio AUC-ROC $\leq 0.5$ en
         clasificación.
-    \item \textbf{Colaboración con enfermería.} El tutor gestionó el apoyo de la Escuela Nacional de
-        Enfermería y Obstetricia (ENEO) de la UNAM. Sesión programada para la semana del 8 de
-        septiembre: las especialistas en tejidos capacitan al equipo en su identificación clínica; el
-        equipo del proyecto explica el protocolo de anotación digital.
+    \item \textbf{Colaboración con enfermería.} El tutor gestionó el apoyo de la Facultad de
+        Enfermería y Obstetricia (FENO) de la UNAM. En la sesión prevista, las especialistas en
+        tejidos capacitarían al equipo en su identificación clínica y el equipo del proyecto
+        explicaría el protocolo de anotación digital. (Al 6 de septiembre esa sesión sigue sin fecha.)
 \end{itemize}
 
 \section{2 de septiembre de 2026}
@@ -178,7 +178,7 @@ continuo.
 \end{enumerate}
 
 \entrada{Catálogo de tejidos propuesto (5 clases)}{Propuesta fundamentada, a confirmar en la sesión
-con la ENEO. Detalle completo en \texttt{documentación/propuesta\_dataset\_tejidos\_UPD.pdf}.}
+con la FENO. Detalle completo en \texttt{documentación/propuesta\_dataset\_tejidos\_UPD.pdf}.}
 
 Se propone anotar cinco categorías, elegidas por relevancia clínica para la cicatrización, evidencia
 en la literatura de que los modelos las distinguen, y prevalencia esperada suficiente
@@ -322,22 +322,25 @@ $N$ produce la curva de eficiencia. La curva mostrada es esquemática.}
 \label{fig:mixta}
 \end{figure}
 
-\textbf{Resultado preliminar} (una sola semilla, Figura~\ref{fig:curva}):
+\textbf{Resultado} (corrida en GPU T4, 3 semillas, 6 de septiembre; Figura~\ref{fig:curva}). Además
+de las curvas \texttt{mixto} y \texttt{solo\_supervisado}, se probó la idea del autor de \emph{filtrar}
+la anotación débil a las imágenes con $\leq 1$ o $\leq 2$ tejidos presentes (opción
+\texttt{--max\_tejidos\_debil}, ver §6 de septiembre).
 
 \begin{table}[H]
 \centering
-\caption{T3/T4 preliminar --- Dice en el split de prueba de DFUTissue, según el número de máscaras
-densas. $N=0$: solo etiqueta de imagen. $N=78$: supervisión densa completa.}
-\begin{tabular}{rrrrr}
+\caption{Dice medio en tejidos (split de prueba de DFUTissue), media $\pm$ desviación estándar sobre
+3 semillas. \texttt{solo}: $N$ máscaras y nada más. \texttt{mixto}: $N$ máscaras $+$ las $78-N$
+etiquetas de imagen. La corrida previa de una semilla dio $N=0$ (débil pura) $=0.07$.}
+\begin{tabular}{rcccc}
 \toprule
-$N$ & Fibrina & Granulación & Callo & Media \\
+$N$ & \texttt{solo} & \texttt{mixto} & \texttt{mixto} $\leq 2$ & \texttt{mixto} $\leq 1$ \\
 \midrule
-0  & 0.00 & 0.00 & 0.20 & 0.07 \\
-5  & 0.07 & 0.76 & 0.56 & 0.46 \\
-10 & 0.30 & 0.81 & 0.55 & 0.55 \\
-20 & 0.21 & 0.73 & 0.59 & 0.51 \\
-40 & 0.24 & 0.84 & 0.61 & 0.56 \\
-78 & 0.50 & 0.88 & 0.71 & 0.70 \\
+5  & $0.37 \pm 0.12$ & $0.32 \pm 0.12$ & $0.34 \pm 0.19$ & $0.26 \pm 0.12$ \\
+10 & $0.47 \pm 0.10$ & $0.50 \pm 0.06$ & $0.46 \pm 0.05$ & $0.38 \pm 0.07$ \\
+20 & $0.56 \pm 0.07$ & $0.58 \pm 0.06$ & $0.55 \pm 0.06$ & $0.42 \pm 0.06$ \\
+40 & $0.62 \pm 0.01$ & $0.59 \pm 0.00$ & $0.55 \pm 0.03$ & $0.57 \pm 0.06$ \\
+78 & $0.72 \pm 0.01$ & $0.71 \pm 0.01$ & --- & --- \\
 \bottomrule
 \end{tabular}
 \end{table}
@@ -345,31 +348,59 @@ $N$ & Fibrina & Granulación & Callo & Media \\
 \begin{figure}[H]
 \centering
 \includegraphics[width=0.92\textwidth]{figuras/fig_curva_eficiencia_dfutissue.png}
-\caption{Frontera de eficiencia de anotación en DFUTissue (resultado preliminar, una semilla).}
+\caption{Frontera de eficiencia de anotación en DFUTissue (3 semillas, banda $= \pm 1\sigma$). Las
+curvas «solo máscaras» y «máscaras $+$ todas las etiquetas débiles» son indistinguibles; filtrar la
+anotación débil la deja por debajo.}
 \label{fig:curva}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.82\textwidth]{figuras/fig_eficiencia_por_tejido.png}
+\caption{La misma curva «solo máscaras densas», desglosada por tejido. La fibrina es el cuello de
+botella y la única clase que sigue mejorando con más máscaras; granulación y callo se saturan
+en $N \approx 10$--$20$.}
+\label{fig:eftejido}
 \end{figure}
 
 \textbf{Lecturas y cautelas:}
 \begin{itemize}[leftmargin=1.5em]
-    \item Con supervisión puramente débil ($N=0$) el modelo no localiza (Dice 0.07). Coincide con la
-        literatura: los métodos de segmentación débilmente supervisada necesitan miles de imágenes
-        para converger.
-    \item Con $\sim$10 máscaras densas (13\,\% de las imágenes) se recupera $\sim$80\,\% del
-        desempeño de la supervisión densa completa. La curva sube casi vertical hasta $N \approx 10$
-        y luego se aplana.
-    \item La fibrina es la única clase que sigue mejorando con más máscaras densas; granulación y
-        callo saturan pronto.
-    \item \textbf{Pendiente crítico:} la curva anterior siempre tiene supervisión débil en las
-        imágenes sin máscara. Falta el control ``$N$ máscaras y nada más'', para saber si la
-        anotación débil \emph{aporta algo} o si es solo el modelo aprendiendo de $N$ muestras. El
-        experimento está preparado (\texttt{--modos mixto,solo\_supervisado}) y se corre en GPU
-        (Google Colab) con tres semillas y bandas de error, junto con una receta de entrenamiento
-        reforzada (aumentación fuerte, pérdida Tversky, sobre-muestreo de la clase rara) y una
-        comparación de arquitecturas (Unet++, SegFormer). El notebook es
-        \texttt{CO-MIL/segmentacion/colab\_estudio\_dfutissue.ipynb}.
-    \item El bache no monótono entre $N=10$ y $N=20$ es ruido de una sola semilla --- con un conjunto
-        pequeño, qué imágenes caen en el subconjunto ``con máscara'' influye mucho.
+    \item \textbf{La anotación débil no aporta nada sobre las máscaras densas a esta escala.} Las
+        curvas \texttt{mixto} y \texttt{solo} coinciden dentro del ruido en todo el rango (en $N=40$
+        la mixta es incluso levemente peor). Concuerda con la literatura y con la predicción previa:
+        la pérdida log-sum-exp necesita miles de imágenes para dar señal; con 78 solo añade ruido.
+        El encuadre del capítulo pasa de «la supervisión mixta es útil» a «bastan $\sim$20 máscaras
+        densas; las etiquetas de imagen baratas no añaden valor a esta escala» --- una afirmación más
+        medida, y el resultado negativo es en sí una aportación (nadie lo ha medido en heridas).
+    \item \textbf{Filtrar la anotación débil (idea del autor) tampoco ayuda; la empeora.} Las curvas
+        \texttt{$\leq 2$} y sobre todo \texttt{$\leq 1$} quedan por debajo de la mixta sin filtrar. El
+        motivo es directo: al filtrar se pasa de 73 imágenes débiles a 12--38, y esa pérdida de datos
+        pesa más que la supuesta señal más limpia. La hipótesis no se sostiene en DFUTissue; queda
+        como pregunta abierta sobre el conjunto de datos propio, donde las regiones de interés
+        (protocolo v1) contienen varios tejidos y hay más imágenes.
+    \item \textbf{La curva sólida es \texttt{solo}:} con $\sim$20 máscaras densas (26\,\% de las
+        imágenes) se recupera el $\sim$78\,\% del desempeño máximo; con $\sim$40 (51\,\%), el
+        $\sim$87\,\%. Con supervisión puramente débil ($N=0$, corrida previa) no localiza (Dice 0.07).
+    \item La fibrina es el cuello de botella (Figura~\ref{fig:eftejido}).
+    \item \textbf{Varianza alta a $N$ bajo} (desviación 0.06--0.19). Tres semillas es el mínimo; se
+        repetirá con cinco antes de la versión final del capítulo.
 \end{itemize}
+
+\entrada{Receta de entrenamiento reforzada y comparación de arquitecturas}{Experimentos 2 y 3 del
+cuaderno, sobre supervisión densa completa (78 máscaras).}
+
+\textbf{Receta reforzada} (aumentación fuerte $+$ pérdida Tversky $+$ sobre-muestreo de las imágenes
+con fibrina), FPN $+$ MobileNetV2, 3 semillas: Fibrina $0.589 \pm 0.05$, Granulación
+$0.881 \pm 0.01$, Callo $0.683 \pm 0.02$, \textbf{media $0.718 \pm 0.015$}. Sube la media del
+baseline T2 ($0.680$) unos cuatro puntos, todo el mérito de la fibrina ($+0.13$; el callo baja un
+poco). Supera al artículo previo del grupo en las tres clases ($+0.17$ de media; los conjuntos de
+prueba no son idénticos).
+
+\textbf{Arquitecturas} (misma receta, una semilla): FPN $+$ MobileNetV2 (4.2\,M) media $0.703$;
+SegFormer-B0 (3.7\,M) $0.720$; Unet $+$ EfficientNet-B0 (6.3\,M) $0.739$; Unet++ $+$ ResNet34
+(26\,M) $0.733$. \textbf{El modelo pensado para dispositivo pierde solo $0.02$--$0.04$ de Dice frente
+a modelos hasta seis veces mayores} --- argumento a favor del objetivo de factibilidad embebida. Hay
+margen para elegir un mejor extractor ligero (EfficientNet-B0, SegFormer-B0) más adelante.
 
 \section{Plan de trabajo y estado}
 
@@ -377,13 +408,13 @@ $N$ & Fibrina & Granulación & Callo & Media \\
 
 \begin{itemize}[leftmargin=1.5em]
     \item La \textbf{anotación densa} es el camino crítico y no depende por completo del autor
-        (participan la ENEO y el Dr.\ Gerardo). Estimación realista: semanas a un par de meses para
+        (participan la FENO y el Dr.\ Gerardo). Estimación realista: semanas a un par de meses para
         60--150 imágenes con asistencia y SAM.
     \item \textbf{En paralelo, desde ya}, sobre datos públicos: baselines de segmentación (hecho, T2),
         el estudio de eficiencia con varias semillas y la ablación de supervisión débil (en curso, en
         GPU), un prototipo de aprendizaje continuo, y la factibilidad embebida. Todo esto ya es
         material de capítulos.
-    \item \textbf{Bloqueado hasta la sesión con la ENEO} (semana del 8 de septiembre): fijar el
+    \item \textbf{Bloqueado hasta la sesión con la FENO} (aún sin fecha): fijar el
         catálogo de 5 clases y los criterios de anotación; a partir de ahí, la versión definitiva del
         protocolo y la reescritura de la hoja de ruta.
     \item Si el componente de aprendizaje continuo resulta demasiado ruidoso con el tamaño de datos
@@ -411,7 +442,7 @@ referencia del brazo débil.
     \item Anotación densa (polígonos por tejido) en MATLAB Image Labeler. La GUI de cajas
         (\texttt{generador\_bolsas.py}) se deprecia.
     \item Catálogo propuesto de 5 clases: granulación, fibrina/esfacelo, callo, necrótico, piel
-        perilesional --- a confirmar con la ENEO. Las 3 primeras coinciden con DFUTissue.
+        perilesional --- a confirmar con la FENO. Las 3 primeras coinciden con DFUTissue.
     \item La localización se resuelve como segmentación semántica supervisada ligera. Las alternativas
         MIL contra el colapso de atención (AEM, ASMIL) quedan descartadas: atacan el problema opuesto.
     \item MIL se conserva como instrumento de los brazos de anotación barata (débil y mixto) y como
@@ -429,8 +460,9 @@ referencia del brazo débil.
 Al 6 de septiembre \textbf{no ha habido ninguna reunión} desde la del 27 de agosto: la sesión con la
 Facultad de Enfermería y Obstetricia (FENO) de la UNAM sigue sin fecha confirmada, y el catálogo de
 cinco tejidos continúa siendo una propuesta sin validar clínicamente. El trabajo de esta semana es,
-por tanto, íntegramente computacional sobre el conjunto de datos público DFUTissue, preparando el
-estudio de eficiencia para poder ejecutarlo en GPU en cuanto haya tiempo de máquina.
+por tanto, íntegramente computacional sobre el conjunto de datos público DFUTissue. El estudio de
+eficiencia se ejecutó esta noche en GPU (Google Colab, T4); sus resultados están incorporados arriba,
+en la sección «Trabajo computacional sobre datos públicos» (experimentos 1, 2 y 3).
 
 \entrada{Filtro de la anotación débil por número de tejidos}{Idea del autor, implementada en
 \texttt{CO-MIL/segmentacion/entrenar\_eficiencia.py} (opción \texttt{--max\_tejidos\_debil}).}
@@ -448,8 +480,10 @@ Se añadió la opción \texttt{--max\_tejidos\_debil k}: en el brazo mixto solo 
 imágenes sin máscara con $\leq k$ tejidos presentes (una clase «está presente» si ocupa al menos 64
 píxeles, para no contar como tejido una astilla de anotación). Acepta una lista
 (\texttt{none,1,2}) que genera varias curvas en una sola corrida; las $N$ imágenes con máscara nunca
-se filtran. Se comprobó el cableado con una corrida corta y se verificó el conteo real de imágenes
-débiles resultante.
+se filtran. La opción \texttt{--dir\_salida} reutiliza una carpeta de resultados y \emph{reanuda} el
+barrido saltando las corridas ya hechas, para poder partir el estudio entre sesiones de Colab.
+\textbf{Resultado: el filtro no ayuda, la empeora} (tabla y discusión en la sección de resultados
+arriba). El motivo es que la reducción de datos pesa más que la señal más limpia.
 
 \textbf{Cautela por el tamaño de DFUTissue.} La distribución de tejidos por imagen en el conjunto de
 entrenamiento (78 imágenes) es:
@@ -476,17 +510,12 @@ interés (protocolo v1) suelen abarcar varios tejidos, la situación puede ser d
 \entrada{Reestructuración del cuaderno de Colab}{\texttt{CO-MIL/segmentacion/colab\_estudio\_
 dfutissue.ipynb}.}
 
-El experimento 1 pasa a comparar \textbf{cuatro curvas en una sola corrida}: \texttt{solo\_
-supervisado} ($N$ máscaras y nada más), \texttt{mixto} ($N$ máscaras + todas las etiquetas débiles),
-y \texttt{mixto $\leq 1$} / \texttt{mixto $\leq 2$} (con el filtro anterior). La brecha
-\texttt{mixto} $-$ \texttt{solo\_supervisado} mide el valor real de la anotación débil; la brecha
-\texttt{mixto} $-$ \texttt{mixto $\leq k$} mide si conviene filtrarla.
-
-El cuaderno se dividió en bloques (uno por semilla para el experimento 1, más un bloque para los
-experimentos 2 y 3) para que cada uno quepa en una sesión de Colab gratuita ($\sim$75--90\,min en
-T4). El script gana la opción \texttt{--dir\_salida}, que reutiliza una carpeta de resultados y
-\emph{reanuda} el barrido saltando las corridas ya completadas: los tres bloques de semilla escriben
-en la misma carpeta de Google Drive y, si una sesión se corta, basta relanzar la misma celda.
+El cuaderno se dividió en bloques (uno por semilla o grupo de semillas para el experimento 1, más un
+bloque para los experimentos 2 y 3) para que cada uno quepa en una sesión de Colab ($\sim$75--90\,min
+en T4). Gracias a \texttt{--dir\_salida}, todos los bloques acumulan en la misma carpeta de Google
+Drive y reanudan. La primera corrida (bloques A/B/C, semillas 42/1/7) se ejecutó en segundo plano sin
+incidencias; queda un bloque adicional (semillas 2 y 3) para pasar a cinco semillas antes de fijar
+las cifras del capítulo.
 
 \entrada{Recorte de la región de interés para el brazo débil --- evaluado, pospuesto}{Segunda parte
 de la idea del autor.}
