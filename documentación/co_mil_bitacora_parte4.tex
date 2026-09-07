@@ -646,6 +646,45 @@ eficiencia de anotación y la factibilidad embebida.
 débiles --- usando la muestra pública de WoundTissue (13 imágenes con máscara) mientras el conjunto
 mexicano no las tenga --- y el experimento de preentrenamiento auto-supervisado.
 
+\section{7 de septiembre de 2026 --- Experimento A: características de \emph{foundation model}}
+
+\entrada{Motivación}{Directiva del autor: el plan firmado no es un techo; usar los mejores métodos
+disponibles. El límite recurrente del proyecto es el extractor congelado (MobileNetV2-ImageNet), que
+no entiende tejido de herida.}
+
+Se probó sustituirlo por \textbf{DINOv2-small} (Meta, auto-supervisado sobre 142\,M de imágenes),
+congelado, con una cabeza ligera entrenable (decodificador convolucional de 0.6\,M para segmentación,
+o cabeza de atención MIL). Scripts: \texttt{CO-MIL/segmentacion/dinov2\_seg.py},
+\texttt{CO-MIL/continual/transferencia\_dinov2.py}.
+
+\begin{table}[H]
+\centering
+\caption{DINOv2-small congelado frente al caballo de batalla, en las tres tareas.}
+\begin{tabular}{lcc}
+\toprule
+& FPN $+$ MobileNetV2 & DINOv2-small congelado \\
+\midrule
+Segmentación --- Dice medio en tejidos (comparación justa) & $0.710 \pm 0.019$ (6 sem.) & $0.675 \pm 0.015$ (3 sem.) \\
+Salto de dominio \emph{zero-shot} --- F1 en el lote mexicano & $0.30$ & $0.30$ \\
+Techo de la tarea mexicana (entrenando en ella) --- F1 & $\sim 0.35$ & $\sim 0.50$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\textbf{Veredicto.} Las características genéricas de \emph{foundation model} \textbf{no son la
+respuesta}: DINOv2 no mejora la segmentación (pierde $\sim$3--4 puntos, sobre todo en fibrina) ni
+cierra el salto de dominio \emph{zero-shot}, y es un modelo más grande (21.6\,M congelados frente a
+2.2\,M). \textbf{MobileNetV2 $+$ FPN se queda como titular de segmentación.} Pero la hipótesis
+``mejores características ayudan'' queda \emph{a medias confirmada}: cuando el modelo sí ve datos de la
+población nueva, las características de DINOv2 elevan el techo de lo aprendible de $\sim$0.35 a
+$\sim$0.50. El cuello de botella de características es real; lo que falla es que DINOv2 es genérico, no
+específico de herida.
+
+\textbf{Implicación:} la apuesta correcta es el \textbf{experimento B --- preentrenamiento
+auto-supervisado (SSL) sobre fotografías de herida sin etiquetar} ($\sim$9\,000 disponibles entre
+DFUTissue, FUSeg, AZH y DFUC), y/o \textbf{destilación} de DINOv2 hacia MobileNetV2 sobre esas mismas
+fotos --- características adaptadas al dominio, no genéricas.
+
 \section{Tareas pendientes (al 7 de septiembre de 2026)}
 
 Lista viva. Orden aproximado de prioridad dentro de cada bloque.
@@ -653,20 +692,23 @@ Lista viva. Orden aproximado de prioridad dentro de cada bloque.
 \subsection*{Computacional --- barato, hacer ya}
 
 \begin{enumerate}[leftmargin=1.6em]
+    \item \textbf{[SIGUIENTE PASO] Experimento B --- preentrenamiento auto-supervisado (SSL) sobre
+        fotografías de herida.} El experimento A (7-sep) mostró que las características genéricas de
+        \emph{foundation model} no bastan, pero que el cuello de botella de características es real.
+        B: preentrenar un extractor ligero (o destilar DINOv2) sobre $\sim$9\,000 fotografías de
+        herida sin etiquetar (DFUTissue 600 $+$ FUSeg 1010 $+$ AZH 1109 $+$ DFUC 5955). Primero
+        el plan escrito (datos, método --- DINO / MAE / destilación / \emph{self-training} ---, qué
+        mide, presupuesto de GPU), luego construirlo. Objetivo: subir el Dice y volver no-trivial el
+        componente continuo.
+    \item \textbf{DINOv2 (experimento A) --- hecho.} Veredicto en la sección anterior: no gana; se
+        conserva como posible \emph{maestro} para destilación en B.
     \item \textbf{SegFormer-B0 con 5--6 semillas.} La comparación de arquitecturas se corrió con una
         sola semilla y SegFormer-B0 (3.7\,M) salió por delante (0.744 frente a 0.710 de FPN +
-        MobileNetV2, 6 semillas). Confirmar si se sostiene: si sí, es un mejor modelo para despliegue
-        embebido y pasa a ser (co-)titular; si baja a $\sim$0.71, ambos empatan y MobileNetV2 gana
-        por madurez de despliegue. $\sim$30\,min en GPU.
+        MobileNetV2). Confirmar si se sostiene. $\sim$30\,min en GPU.
     \item \textbf{Test de transferencia con máscaras densas.} Entrenar el modelo de \emph{segmentación}
         en DFUTissue y evaluarlo (Dice real, no F1 débil) sobre la muestra pública de WoundTissue
         (13 imágenes con máscara, 2 clases compartidas). ¿El salto de dominio se ve distinto con
-        etiquetas fuertes que con las etiquetas débiles del lote mexicano?
-    \item \textbf{Plan escrito del experimento de preentrenamiento auto-supervisado (SSL).} Antes de
-        construirlo: qué datos (las 600 imágenes sin etiqueta de DFUTissue $+$ las $\sim$164
-        mexicanas sin anotar), qué método (DINO / \emph{self-training} con pseudo-etiquetas), qué
-        mide, cuánto cómputo. Objetivo doble: subir el Dice y volver no-trivial el componente
-        continuo.
+        etiquetas fuertes que con las débiles del lote mexicano?
 \end{enumerate}
 
 \subsection*{Cierre del prototipo continuo (2\textsuperscript{a} pasada, si el tutor confirma el reencuadre)}
