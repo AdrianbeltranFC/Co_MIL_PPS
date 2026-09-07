@@ -22,7 +22,7 @@ datasets_publicos/
 # Resultados de experimentos descargados de Colab/Drive (JSON, checkpoints, muestras).
 # Las cifras relevantes se registran en la bitacora; el detalle vive en Drive.
 comil_resultados_dfutissue/
-comil_resultados_dfutissue-*.zip
+comil_resultados*.zip
 
 # Salidas del modulo de aprendizaje continuo (cache de features, matrices R, boxplots).
 Pesos_Entrenados/continual/

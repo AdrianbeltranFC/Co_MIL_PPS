@@ -178,6 +178,15 @@ def resumen_dominios(sitio: np.ndarray, Y: torch.Tensor) -> str:
     return "\n".join(filas)
 
 
+def split_global(n: int, frac_test: float = 0.25, semilla: int = 0):
+    """Partición train/test única sobre todas las imágenes (para el modo class-incremental,
+    donde no hay dominios: lo que se incrementa son las clases, no la distribución)."""
+    rng = np.random.default_rng(semilla)
+    idx = rng.permutation(n)
+    n_te = max(6, int(round(n * frac_test)))
+    return idx[n_te:].copy(), idx[:n_te].copy()
+
+
 def split_por_dominio(sitio: np.ndarray, frac_test: float = 0.25, semilla: int = 0) -> dict:
     """Por sitio: partición train/test reproducible (índices globales sobre las bolsas)."""
     rng = np.random.default_rng(semilla)

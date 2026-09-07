@@ -322,25 +322,25 @@ $N$ produce la curva de eficiencia. La curva mostrada es esquemática.}
 \label{fig:mixta}
 \end{figure}
 
-\textbf{Resultado} (corrida en GPU T4, 3 semillas, 6 de septiembre; Figura~\ref{fig:curva}). Además
-de las curvas \texttt{mixto} y \texttt{solo\_supervisado}, se probó la idea del autor de \emph{filtrar}
-la anotación débil a las imágenes con $\leq 1$ o $\leq 2$ tejidos presentes (opción
+\textbf{Resultado} (corrida en GPU T4, 5 semillas, 6--7 de septiembre; Figura~\ref{fig:curva}).
+Además de las curvas \texttt{mixto} y \texttt{solo\_supervisado}, se probó la idea del autor de
+\emph{filtrar} la anotación débil a las imágenes con $\leq 1$ o $\leq 2$ tejidos presentes (opción
 \texttt{--max\_tejidos\_debil}, ver §6 de septiembre).
 
 \begin{table}[H]
 \centering
 \caption{Dice medio en tejidos (split de prueba de DFUTissue), media $\pm$ desviación estándar sobre
-3 semillas. \texttt{solo}: $N$ máscaras y nada más. \texttt{mixto}: $N$ máscaras $+$ las $78-N$
+5 semillas. \texttt{solo}: $N$ máscaras y nada más. \texttt{mixto}: $N$ máscaras $+$ las $78-N$
 etiquetas de imagen. La corrida previa de una semilla dio $N=0$ (débil pura) $=0.07$.}
 \begin{tabular}{rcccc}
 \toprule
 $N$ & \texttt{solo} & \texttt{mixto} & \texttt{mixto} $\leq 2$ & \texttt{mixto} $\leq 1$ \\
 \midrule
-5  & $0.37 \pm 0.12$ & $0.32 \pm 0.12$ & $0.34 \pm 0.19$ & $0.26 \pm 0.12$ \\
-10 & $0.47 \pm 0.10$ & $0.50 \pm 0.06$ & $0.46 \pm 0.05$ & $0.38 \pm 0.07$ \\
-20 & $0.56 \pm 0.07$ & $0.58 \pm 0.06$ & $0.55 \pm 0.06$ & $0.42 \pm 0.06$ \\
-40 & $0.62 \pm 0.01$ & $0.59 \pm 0.00$ & $0.55 \pm 0.03$ & $0.57 \pm 0.06$ \\
-78 & $0.72 \pm 0.01$ & $0.71 \pm 0.01$ & --- & --- \\
+5  & $0.38 \pm 0.10$ & $0.38 \pm 0.12$ & $0.35 \pm 0.15$ & $0.31 \pm 0.12$ \\
+10 & $0.48 \pm 0.08$ & $0.50 \pm 0.05$ & $0.46 \pm 0.04$ & $0.40 \pm 0.06$ \\
+20 & $0.57 \pm 0.06$ & $0.56 \pm 0.05$ & $0.54 \pm 0.05$ & $0.44 \pm 0.05$ \\
+40 & $0.63 \pm 0.02$ & $0.55 \pm 0.04$ & $0.54 \pm 0.03$ & $0.55 \pm 0.05$ \\
+78 & $0.71 \pm 0.02$ & $0.70 \pm 0.01$ & --- & --- \\
 \bottomrule
 \end{tabular}
 \end{table}
@@ -348,7 +348,7 @@ $N$ & \texttt{solo} & \texttt{mixto} & \texttt{mixto} $\leq 2$ & \texttt{mixto} 
 \begin{figure}[H]
 \centering
 \includegraphics[width=0.92\textwidth]{figuras/fig_curva_eficiencia_dfutissue.png}
-\caption{Frontera de eficiencia de anotación en DFUTissue (3 semillas, banda $= \pm 1\sigma$). Las
+\caption{Frontera de eficiencia de anotación en DFUTissue (5 semillas, banda $= \pm 1\sigma$). Las
 curvas «solo máscaras» y «máscaras $+$ todas las etiquetas débiles» son indistinguibles; filtrar la
 anotación débil la deja por debajo.}
 \label{fig:curva}
@@ -366,8 +366,9 @@ en $N \approx 10$--$20$.}
 \textbf{Lecturas y cautelas:}
 \begin{itemize}[leftmargin=1.5em]
     \item \textbf{La anotación débil no aporta nada sobre las máscaras densas a esta escala.} Las
-        curvas \texttt{mixto} y \texttt{solo} coinciden dentro del ruido en todo el rango (en $N=40$
-        la mixta es incluso levemente peor). Concuerda con la literatura y con la predicción previa:
+        curvas \texttt{mixto} y \texttt{solo} coinciden dentro del ruido hasta $N=20$, y en $N=40$ la
+        mixta es \emph{peor} de forma consistente ($0.55$ frente a $0.63$). Concuerda con la
+        literatura y con la predicción previa:
         la pérdida log-sum-exp necesita miles de imágenes para dar señal; con 78 solo añade ruido.
         El encuadre del capítulo pasa de «la supervisión mixta es útil» a «bastan $\sim$20 máscaras
         densas; las etiquetas de imagen baratas no añaden valor a esta escala» --- una afirmación más
@@ -382,8 +383,9 @@ en $N \approx 10$--$20$.}
         imágenes) se recupera el $\sim$78\,\% del desempeño máximo; con $\sim$40 (51\,\%), el
         $\sim$87\,\%. Con supervisión puramente débil ($N=0$, corrida previa) no localiza (Dice 0.07).
     \item La fibrina es el cuello de botella (Figura~\ref{fig:eftejido}).
-    \item \textbf{Varianza alta a $N$ bajo} (desviación 0.06--0.19). Tres semillas es el mínimo; se
-        repetirá con cinco antes de la versión final del capítulo.
+    \item \textbf{Varianza alta a $N$ bajo} (desviación 0.10--0.15): con un conjunto pequeño, qué
+        imágenes caen en el subconjunto «con máscara» influye mucho. La media sobre 5 semillas ya es
+        estable en la conclusión cualitativa.
 \end{itemize}
 
 \entrada{Receta de entrenamiento reforzada y comparación de arquitecturas}{Experimentos 2 y 3 del
@@ -513,9 +515,8 @@ dfutissue.ipynb}.}
 El cuaderno se dividió en bloques (uno por semilla o grupo de semillas para el experimento 1, más un
 bloque para los experimentos 2 y 3) para que cada uno quepa en una sesión de Colab ($\sim$75--90\,min
 en T4). Gracias a \texttt{--dir\_salida}, todos los bloques acumulan en la misma carpeta de Google
-Drive y reanudan. La primera corrida (bloques A/B/C, semillas 42/1/7) se ejecutó en segundo plano sin
-incidencias; queda un bloque adicional (semillas 2 y 3) para pasar a cinco semillas antes de fijar
-las cifras del capítulo.
+Drive y reanudan. El estudio de eficiencia corrió completo en segundo plano (bloques A/B/C/A2,
+semillas 42/1/7/2/3), más los experimentos 2 y 3; las cifras de arriba son sobre esas 5 semillas.
 
 \entrada{Recorte de la región de interés para el brazo débil --- evaluado, pospuesto}{Segunda parte
 de la idea del autor.}
