@@ -646,6 +646,63 @@ eficiencia de anotación y la factibilidad embebida.
 débiles --- usando la muestra pública de WoundTissue (13 imágenes con máscara) mientras el conjunto
 mexicano no las tenga --- y el experimento de preentrenamiento auto-supervisado.
 
+\section{Tareas pendientes (al 7 de septiembre de 2026)}
+
+Lista viva. Orden aproximado de prioridad dentro de cada bloque.
+
+\subsection*{Computacional --- barato, hacer ya}
+
+\begin{enumerate}[leftmargin=1.6em]
+    \item \textbf{SegFormer-B0 con 5--6 semillas.} La comparación de arquitecturas se corrió con una
+        sola semilla y SegFormer-B0 (3.7\,M) salió por delante (0.744 frente a 0.710 de FPN +
+        MobileNetV2, 6 semillas). Confirmar si se sostiene: si sí, es un mejor modelo para despliegue
+        embebido y pasa a ser (co-)titular; si baja a $\sim$0.71, ambos empatan y MobileNetV2 gana
+        por madurez de despliegue. $\sim$30\,min en GPU.
+    \item \textbf{Test de transferencia con máscaras densas.} Entrenar el modelo de \emph{segmentación}
+        en DFUTissue y evaluarlo (Dice real, no F1 débil) sobre la muestra pública de WoundTissue
+        (13 imágenes con máscara, 2 clases compartidas). ¿El salto de dominio se ve distinto con
+        etiquetas fuertes que con las etiquetas débiles del lote mexicano?
+    \item \textbf{Plan escrito del experimento de preentrenamiento auto-supervisado (SSL).} Antes de
+        construirlo: qué datos (las 600 imágenes sin etiqueta de DFUTissue $+$ las $\sim$164
+        mexicanas sin anotar), qué método (DINO / \emph{self-training} con pseudo-etiquetas), qué
+        mide, cuánto cómputo. Objetivo doble: subir el Dice y volver no-trivial el componente
+        continuo.
+\end{enumerate}
+
+\subsection*{Cierre del prototipo continuo (2\textsuperscript{a} pasada, si el tutor confirma el reencuadre)}
+
+\begin{enumerate}[leftmargin=1.6em, resume]
+    \item Anclas de comparación: \textbf{LwF} (regularización) y \textbf{NCM / Deep-SLDA}
+        (exemplar-free), una por familia de Kumari \emph{et al.} (2025).
+    \item Barrido de tamaño de búfer $\{0, 5, 10, 20, \text{todos}\}$ por clase; test de Wilcoxon
+        (repetición vs.\ \emph{naive}).
+    \item Latencia en dispositivo / exportación a ONNX del modelo titular (objetivo 5).
+\end{enumerate}
+
+\subsection*{Documentación y figuras}
+
+\begin{enumerate}[leftmargin=1.6em, resume]
+    \item Actualizar \texttt{fig\_pipeline\_estado\_actual} a los tres brazos $+$ anotación densa
+        (pendiente desde el 5 de septiembre).
+    \item Reescribir la hoja de ruta de trabajo (\texttt{ROADMAP\_PoC.md}) con el plan post-pivote y
+        el cronograma real (el cuerpo todavía es el plan de agosto).
+    \item Empezar a redactar los capítulos con resultados ya cerrados: conjunto de datos $+$
+        benchmark de segmentación, y frontera de eficiencia de anotación.
+\end{enumerate}
+
+\subsection*{Bloqueado en terceros / decisiones del autor}
+
+\begin{enumerate}[leftmargin=1.6em, resume]
+    \item \textbf{Sesión con la FENO}: fijar el catálogo de 5 clases y el protocolo de anotación
+        densa. Sin fecha.
+    \item \textbf{Anotación densa del conjunto mexicano} (camino crítico del proyecto).
+    \item Feedback del autor a \texttt{propuesta\_dataset\_tejidos\_UPD.pdf} (apellido del Dr.\
+        Gerardo, revisión clínica de las 5 clases).
+    \item \textbf{Reunión con el tutor}: presentar el avance (artifact), confirmar el reencuadre y
+        las decisiones abiertas (reformulación del objetivo 3; si DFUC 2021 entra como segundo
+        dominio real).
+\end{enumerate}
+
 % -----------------------------------------------------------------------------------
 % Plantilla para futuras entradas. Copiar el bloque \entrada{...}{...} según se necesite
 % dentro de una nueva \section{DD de mes de AAAA} para cada sesión de trabajo nueva.
