@@ -533,6 +533,119 @@ real de piel sana, protocolo v1), recortando cada imagen de entrenamiento a la c
 máscara más un margen fijo antes del brazo débil, como ablación de una sola figura cuando haya
 máscaras.
 
+\section{6--7 de septiembre de 2026 --- Prototipo de aprendizaje continuo (objetivo 3)}
+
+\entrada{Motivación y montaje}{Módulo \texttt{CO-MIL/continual/}. El componente continuo es el que da
+nombre al proyecto y el de más peso ante el jurado.}
+
+La preocupación de origen del tutor es concreta: la app del trabajo previo, entrenada en un conjunto
+de datos, \textbf{falla} con fotografías de otra población (otros tonos de piel, otra cámara, otro
+encuadre). Eso es un problema de \emph{generalización entre dominios}, no de olvido catastrófico en el
+sentido académico. El prototipo aborda ambos.
+
+\textbf{Montaje.} Extractor MobileNetV2 \textbf{congelado}; se precalculan una sola vez las
+características de los parches (rejilla nativa $8\times8 = 64$ instancias por imagen); solo entrena la
+cabeza de atención con compuertas $+$ clasificador por clase, sobre las tres clases compartidas
+{Fibrina, Granulación, Callo}. Métricas desde la matriz $R[i,j]$ (F1 en el lote $j$ tras el paso
+$i$): ACC, BWT (Lopez-Paz \& Ranzato, NeurIPS 2017) y \emph{Forgetting Measure} (Chaudhry \emph{et
+al.}, ECCV 2018). Estrategias: \emph{naive} (reentrenar sin más, cota inferior), \emph{joint}
+(reentrenar con todo, cota superior), \emph{experience replay} (búfer de bolsas completas) y
+\emph{latent replay} (el búfer guarda solo el vector medio 1280-D --- 64$\times$ menos
+almacenamiento, sin imágenes).
+
+\entrada{Escenarios simulados: el olvido es leve}{Dos formas de simular los lotes sobre DFUTissue.}
+
+\begin{itemize}[leftmargin=1.5em]
+    \item \textbf{Domain-incremental} (las clases fijas, cambia la ``cámara''). Los sitios se
+        simularon con \emph{shift fotométrico} (balance de blancos, gamma, desenfoque) porque el
+        agrupamiento $k$-means sobre las características no separa dominios en DFUTissue (silueta
+        $\approx 0.04$). Resultado (6 órdenes $\times$ 5 semillas): el \emph{naive} pierde
+        $\sim$3 puntos de F1 y es \textbf{inestable} (desv. de la ACC $0.06$ frente a $0.016$ de las
+        demás; en algún orden el BWT baja a $-0.24$); \emph{experience} y \emph{latent replay} lo
+        estabilizan y alcanzan al oráculo (ACC $\approx 0.81$, BWT $\approx 0$).
+    \item \textbf{Class-incremental} (la taxonomía \emph{crece}: primero granulación, luego $+$fibrina,
+        luego $+$callo). Resultado (6 órdenes $\times$ 3 semillas): \emph{naive} ACC $0.758$,
+        \emph{Forgetting} $+0.034$; \emph{experience}/\emph{latent replay} ACC $0.812$,
+        \emph{Forgetting} $-0.024$ (mejoran, no olvidan). Una ablación con cabeza única (sin el
+        aislamiento por clase de la arquitectura Co-MIL) da lo mismo.
+\end{itemize}
+
+\textbf{Por qué es leve.} Con el extractor congelado las características no se mueven, así que lo que
+la cabeza aprendió de una clase o un dominio sigue siendo computable desde las mismas
+características más tarde; y la cabeza es tan pequeña que unas decenas de épocas no borran la
+frontera de decisión anterior. \textbf{La elección desplegable (MobileNetV2 congelado) resulta ser
+también la robusta al cambio de dominio} --- un resultado útil en sí, aunque débil como ``problema a
+resolver''.
+
+\entrada{El test de dominio REAL: DFUTissue $\to$ lote mexicano}{%
+\texttt{CO-MIL/continual/transferencia.py}. Segundo dominio \emph{de verdad}: las 185 regiones del
+lote experto mexicano con etiqueta débil de tejido, reescaladas y pasadas por el mismo extractor
+congelado.}
+
+\begin{table}[H]
+\centering
+\caption{Transferencia y aprendizaje continuo DFUTissue $\to$ lote mexicano (5 semillas, F1 de
+clasificación de imagen). ``Olvido DFU'' $= R[0,0]-R[1,0]$.}
+\begin{tabular}{lcccc}
+\toprule
+& F1 final DFUTissue & F1 final mexicano & Olvido DFU \\
+\midrule
+Solo DFUTissue (referencia) & $0.739 \pm 0.023$ & $0.302 \pm 0.014$ & --- \\
+\midrule
+\emph{naive} (secuencial)   & $\mathbf{0.017 \pm 0.021}$ & $0.319 \pm 0.056$ & $\mathbf{+0.722}$ \\
+\emph{joint} (acumulativo)  & $0.751 \pm 0.028$ & $0.319 \pm 0.071$ & $-0.012$ \\
+\emph{experience replay}    & $0.699 \pm 0.039$ & $\mathbf{0.351 \pm 0.072}$ & $+0.040$ \\
+\emph{latent replay}        & $\mathbf{0.756 \pm 0.025}$ & $0.324 \pm 0.067$ & $-0.017$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=\textwidth]{figuras/fig_continual_salto.png}
+\caption{Izquierda: el salto de dominio y qué hace cada estrategia. El \emph{naive} secuencial destruye
+DFUTissue (0.74 $\to$ 0.02); \emph{latent replay} lo evita. Derecha: el test del filtro --- ni la
+aumentación fuerte de cámara/color ni la normalización de color mueven el número del lote mexicano.}
+\label{fig:continual}
+\end{figure}
+
+\textbf{Lecturas:}
+\begin{itemize}[leftmargin=1.5em]
+    \item \textbf{El olvido catastrófico SÍ es real cuando los dominios difieren de verdad.} El
+        entrenamiento secuencial \emph{naive} colapsa DFUTissue de $0.74$ a $0.02$. \textbf{La
+        repetición latente lo evita por completo} (queda en $0.76$) a coste de almacenamiento
+        $\sim$0 --- guarda vectores, no fotografías de pacientes. Este es el resultado del objetivo 3.
+    \item \textbf{Matiz sobre el ``salto de 44 puntos''.} La caída $0.74 \to 0.30$ mezcla dos cosas.
+        Entrenando \emph{directamente} en el lote mexicano débil, el techo de esa tarea es
+        $\sim$0.35 (etiquetas débiles ruidosas, solo 11 regiones con callo, distorsión del
+        reensamblado). El modelo de DFUTissue alcanza $0.30$ --- solo $\sim$5 puntos por debajo del
+        techo. La transferencia \emph{pura} es pequeña; la mayor parte del ``salto'' es que la
+        evaluación mexicana débil es una tarea intrínsecamente más difícil.
+    \item \textbf{No es un problema de cámara/color} (\texttt{transferencia\_filtro.py},
+        idea del autor). Se midió el salto en cuatro condiciones: base, aumentación fuerte de
+        cámara/color al entrenar, normalización del color de las fotos mexicanas a las estadísticas
+        de DFUTissue, y ambas. El F1 en el lote mexicano se queda en $0.29$--$0.30$ en \emph{las
+        cuatro}. La aumentación sube DFUTissue de $0.74$ a $0.81$ pero no ayuda a transferir. No hay
+        atajo barato para una población nueva.
+\end{itemize}
+
+\entrada{Reencuadre del objetivo 3}{A partir de lo anterior.}
+
+El capítulo continuo no será ``resolvimos el olvido catastrófico'', sino: (1) se caracteriza el
+comportamiento incremental de un clasificador de heridas desplegable con extractor congelado ---
+territorio sin publicar en heridas; (2) el olvido es leve mientras los dominios sean cercanos y
+\textbf{catastrófico cuando difieren de verdad}, y la \textbf{repetición latente} lo elimina a coste
+de almacenamiento nulo y compatible con privacidad; (3) adaptar el modelo a una población nueva
+\emph{no} se logra con filtros ni con una tanda de etiquetas débiles: hace falta anotación densa real
+del conjunto mexicano y/o mejores características (preentrenamiento auto-supervisado). Si el resultado
+final resulta ruidoso con el tamaño de datos disponible, se presenta como diseño completo $+$
+resultados parciales $+$ trabajo futuro, y la tesis se sostiene sobre el conjunto de datos, la
+eficiencia de anotación y la factibilidad embebida.
+
+\textbf{Pendiente:} repetir el test de transferencia con \emph{máscaras densas} en lugar de etiquetas
+débiles --- usando la muestra pública de WoundTissue (13 imágenes con máscara) mientras el conjunto
+mexicano no las tenga --- y el experimento de preentrenamiento auto-supervisado.
+
 % -----------------------------------------------------------------------------------
 % Plantilla para futuras entradas. Copiar el bloque \entrada{...}{...} según se necesite
 % dentro de una nueva \section{DD de mes de AAAA} para cada sesión de trabajo nueva.
