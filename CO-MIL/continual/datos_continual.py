@@ -166,6 +166,76 @@ def cargar(T: int = 3):
 
 
 # ---------------------------------------------------------------------------
+# Segundo dominio REAL: el lote mexicano con anotación débil (bolsas MIL)
+# ---------------------------------------------------------------------------
+# En el vector Y de 12 clases del catálogo mexicano: 0 = Granulación, 1 = Fibrina,
+# 3 = Tejido Calloso.  Se reordena a [Fibrina, Granulación, Callo] para casar con
+# CLASES_TEJIDO de este módulo.
+_MEX_A_DFU = [1, 0, 3]
+RUTA_CACHE_MEX = os.path.join(DIR_CACHE, "features_mexicano.pt")
+
+
+def _reconstruir_roi(bolsa_X, grid_shape, patch_size):
+    gh, gw = grid_shape
+    lienzo = torch.zeros(3, gh * patch_size, gw * patch_size, dtype=bolsa_X.dtype)
+    k = 0
+    for r in range(gh):
+        for c in range(gw):
+            if k < bolsa_X.shape[0]:
+                lienzo[:, r * patch_size:(r + 1) * patch_size,
+                       c * patch_size:(c + 1) * patch_size] = bolsa_X[k]
+                k += 1
+    return lienzo
+
+
+def cachear_features_mexicano(dispositivo=None, forzar=False) -> str:
+    """Cada ROI del lote experto (bolsa MIL, parches 224 px) se reensambla, se
+    reescala a 256 y se pasa por el MISMO extractor congelado -> bolsa [64,1280],
+    igual representación que DFUTissue. Etiqueta débil de 3 clases derivada de la
+    etiqueta de imagen que puso el clínico."""
+    import glob
+    if os.path.exists(RUTA_CACHE_MEX) and not forzar:
+        return RUTA_CACHE_MEX
+    dispositivo = dispositivo or torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    os.makedirs(DIR_CACHE, exist_ok=True)
+    extractor = _extractor_congelado(dispositivo)
+    patron = os.path.join(RAIZ_REPO, "APP_generador_bolsas", "**",
+                          "Bolsas_MIL_Procesadas", "224px", "*__roi_*.pt")
+    archivos = sorted(glob.glob(patron, recursive=True))
+
+    from PIL import Image as _Im
+    bolsas, etiquetas, nombres = [], [], []
+    for f in archivos:
+        d = torch.load(f, weights_only=False)
+        meta = d["spatial_metadata"]
+        img = _reconstruir_roi(d["X"], meta["grid_shape"], meta["patch_size"]).clamp(0, 1)
+        arr = (img.numpy().transpose(1, 2, 0) * 255).astype(np.uint8)
+        arr = np.asarray(_Im.fromarray(arr).resize((256, 256), _Im.BILINEAR))
+        x = (arr.astype(np.float32) / 255.0 - _MEAN) / _STD
+        x = torch.from_numpy(np.ascontiguousarray(x.transpose(2, 0, 1)))
+        with torch.no_grad():
+            fmap = extractor(x.unsqueeze(0).to(dispositivo))
+        bolsas.append(fmap.squeeze(0).flatten(1).t().contiguous().cpu())
+        y12 = d["Y"].float()
+        etiquetas.append(torch.tensor([float(y12[i]) for i in _MEX_A_DFU]))
+        nombres.append(os.path.basename(f).replace("_bag.pt", ""))
+
+    datos = {"nombres": nombres, "X": torch.stack(bolsas), "Y": torch.stack(etiquetas)}
+    torch.save(datos, RUTA_CACHE_MEX)
+    print(f"[cache-mex] {len(nombres)} ROIs · X={tuple(datos['X'].shape)} · "
+          f"positivos/clase (Fib,Gra,Cal)={datos['Y'].sum(0).tolist()} -> "
+          f"{os.path.relpath(RUTA_CACHE_MEX, RAIZ_REPO)}")
+    return RUTA_CACHE_MEX
+
+
+def cargar_mexicano():
+    if not os.path.exists(RUTA_CACHE_MEX):
+        cachear_features_mexicano()
+    d = torch.load(RUTA_CACHE_MEX)
+    return d["nombres"], d["X"], d["Y"]
+
+
+# ---------------------------------------------------------------------------
 # Particiones y diagnóstico
 # ---------------------------------------------------------------------------
 def resumen_dominios(sitio: np.ndarray, Y: torch.Tensor) -> str:
