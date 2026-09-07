@@ -62,7 +62,7 @@ Mientras se anota el conjunto mexicano, el modelado se adelanta sobre **DFUTissu
 
 | Modelo | Parámetros | Dice medio | Fibrina / Granul. / Callo |
 | :--- | ---: | ---: | :--- |
-| Baseline previo del grupo (Maldonado-Oclica *et al.* 2025) | — | 0.545 | 0.333 / 0.786 / 0.515 |
+| Baseline previo del grupo (Maldonado-Oclica *et al.* 2025, Fig. 1) | — | 0.54 | 0.33 / 0.79 / 0.51 |
 | FPN + MobileNetV2, receta reforzada (6 semillas) | 4.2 M | **0.710** | 0.58 / 0.87 / 0.68 |
 | SegFormer-B0, misma receta (1 semilla) | 3.7 M | **0.744** | 0.61 / 0.90 / 0.72 |
 | U-Net++ · ResNet-34 (referencia pesada) | 26 M | 0.719 | — |

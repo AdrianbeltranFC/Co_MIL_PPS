@@ -216,24 +216,27 @@ precisión.}
 
 Corrección respecto a lo que se había registrado: la segmentación de tejido de ese trabajo
 \textbf{sí} se hizo con aprendizaje profundo (ensamble de ResUnet + Unet++), no con \emph{k-means} ---
-el \emph{k-means} de color era un análisis aparte. Los resultados reportados (sobre DFUTissue, con
-partición 70:15:15) y los del baseline propio de esta semana (T2, sección siguiente, partición
-oficial 78:16:16):
+el \emph{k-means} de color era un análisis aparte, sin métricas. Las cifras exactas se tomaron de la
+\textbf{Figura~1 del artículo} (\texttt{documentación/Arículo\_DFUs\_Italia.pdf}), donde se dan en
+porcentaje: Fibrina 33.25, Granulación 78.56, Tejido calloso 51.47, herida binaria (ROI) 80.63. El
+artículo entrena y evalúa la parte de tejido sobre DFUTissue con partición 70:15:15; el baseline
+propio (T2) usa la partición oficial 78:16:16.
 
 \begin{table}[H]
 \centering
-\caption{Dice por tejido en DFUTissue. ``Italia'' = Maldonado-Oclica \emph{et al.}\ (2025); ``T2'' =
-baseline de esta bitácora (FPN + MobileNetV2, 4.2\,M de parámetros, CPU). Los conjuntos de prueba no
-son idénticos, así que la comparación es indicativa.}
+\caption{Dice por tejido en DFUTissue. ``Italia'' = Maldonado-Oclica \emph{et al.}\ (2025), Fig.~1;
+``T2'' = baseline de esta bitácora (FPN + MobileNetV2, 4.2\,M de parámetros, CPU). La media no la
+reporta el artículo: se calcula de las tres clases. Los conjuntos de prueba no son idénticos, así
+que la comparación es indicativa.}
 \begin{tabular}{lrrr}
 \toprule
 Tejido & Italia (ResUnet+Unet++) & T2 (FPN+MobileNetV2) & Diferencia \\
 \midrule
-Fibrina     & 0.333 & 0.455 & $+0.122$ \\
-Granulación & 0.786 & 0.874 & $+0.088$ \\
-Callo       & 0.515 & 0.712 & $+0.197$ \\
+Fibrina     & 0.33 & 0.455 & $+0.12$ \\
+Granulación & 0.79 & 0.874 & $+0.09$ \\
+Callo       & 0.51 & 0.712 & $+0.20$ \\
 \midrule
-Media       & 0.545 & 0.680 & $+0.135$ \\
+Media       & 0.54 & 0.680 & $+0.14$ \\
 \bottomrule
 \end{tabular}
 \end{table}
