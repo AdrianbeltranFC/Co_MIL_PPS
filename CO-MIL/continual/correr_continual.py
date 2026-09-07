@@ -199,6 +199,7 @@ def main():
 
     agregado = {e: {k: [r[k] for r in runs if r["estrategia"] == e]
                     for k in ("ACC", "BWT", "Forgetting")} for e in estrategias}
+    os.makedirs(ruta, exist_ok=True)
     with open(os.path.join(ruta, "resultados_continual.json"), "w", encoding="utf-8") as f:
         json.dump({"config": vars(args), "runs": runs}, f, ensure_ascii=False, indent=2)
     graficar(agregado, args.modo, os.path.join(ruta, "boxplots_continual.png"))
