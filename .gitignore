@@ -24,6 +24,9 @@ datasets_publicos/
 comil_resultados_dfutissue/
 comil_resultados_dfutissue-*.zip
 
+# Salidas del modulo de aprendizaje continuo (cache de features, matrices R, boxplots).
+Pesos_Entrenados/continual/
+
 # Excepcion: figuras reales de la bitacora/tesis (no son dataset clinico, son
 # resultados/diagramas que si deben versionarse)
 !documentación/figuras/*.png
