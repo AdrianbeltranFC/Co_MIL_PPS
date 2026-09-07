@@ -188,17 +188,21 @@ def _reconstruir_roi(bolsa_X, grid_shape, patch_size):
     return lienzo
 
 
-def cachear_features_mexicano(dispositivo=None, forzar=False) -> str:
+def cachear_features_mexicano(dispositivo=None, forzar=False, colornorm=False) -> str:
     """Cada ROI del lote experto (bolsa MIL, parches 224 px) se reensambla, se
     reescala a 256 y se pasa por el MISMO extractor congelado -> bolsa [64,1280],
     igual representación que DFUTissue. Etiqueta débil de 3 clases derivada de la
-    etiqueta de imagen que puso el clínico."""
+    etiqueta de imagen que puso el clínico.
+    `colornorm`: primero desplaza media y desv. por canal de cada foto a las de
+    DFUTissue (transferencia de color global) -- para separar el efecto cámara/color."""
     import glob
-    if os.path.exists(RUTA_CACHE_MEX) and not forzar:
-        return RUTA_CACHE_MEX
+    ruta_out = RUTA_CACHE_MEX.replace(".pt", "_norm.pt") if colornorm else RUTA_CACHE_MEX
+    if os.path.exists(ruta_out) and not forzar:
+        return ruta_out
     dispositivo = dispositivo or torch.device("cuda" if torch.cuda.is_available() else "cpu")
     os.makedirs(DIR_CACHE, exist_ok=True)
     extractor = _extractor_congelado(dispositivo)
+    ref_m, ref_s = _stats_color_dfu() if colornorm else (None, None)
     patron = os.path.join(RAIZ_REPO, "APP_generador_bolsas", "**",
                           "Bolsas_MIL_Procesadas", "224px", "*__roi_*.pt")
     archivos = sorted(glob.glob(patron, recursive=True))
@@ -211,7 +215,11 @@ def cachear_features_mexicano(dispositivo=None, forzar=False) -> str:
         img = _reconstruir_roi(d["X"], meta["grid_shape"], meta["patch_size"]).clamp(0, 1)
         arr = (img.numpy().transpose(1, 2, 0) * 255).astype(np.uint8)
         arr = np.asarray(_Im.fromarray(arr).resize((256, 256), _Im.BILINEAR))
-        x = (arr.astype(np.float32) / 255.0 - _MEAN) / _STD
+        xf = arr.astype(np.float32) / 255.0
+        if colornorm:
+            m, sdv = xf.reshape(-1, 3).mean(0), xf.reshape(-1, 3).std(0) + 1e-6
+            xf = np.clip((xf - m) / sdv * ref_s + ref_m, 0, 1).astype(np.float32)
+        x = (xf - _MEAN) / _STD
         x = torch.from_numpy(np.ascontiguousarray(x.transpose(2, 0, 1)))
         with torch.no_grad():
             fmap = extractor(x.unsqueeze(0).to(dispositivo))
@@ -221,18 +229,96 @@ def cachear_features_mexicano(dispositivo=None, forzar=False) -> str:
         nombres.append(os.path.basename(f).replace("_bag.pt", ""))
 
     datos = {"nombres": nombres, "X": torch.stack(bolsas), "Y": torch.stack(etiquetas)}
-    torch.save(datos, RUTA_CACHE_MEX)
-    print(f"[cache-mex] {len(nombres)} ROIs · X={tuple(datos['X'].shape)} · "
-          f"positivos/clase (Fib,Gra,Cal)={datos['Y'].sum(0).tolist()} -> "
-          f"{os.path.relpath(RUTA_CACHE_MEX, RAIZ_REPO)}")
-    return RUTA_CACHE_MEX
+    torch.save(datos, ruta_out)
+    print(f"[cache-mex{'-norm' if colornorm else ''}] {len(nombres)} ROIs · "
+          f"X={tuple(datos['X'].shape)} · positivos/clase (Fib,Gra,Cal)="
+          f"{datos['Y'].sum(0).tolist()} -> {os.path.relpath(ruta_out, RAIZ_REPO)}")
+    return ruta_out
 
 
-def cargar_mexicano():
-    if not os.path.exists(RUTA_CACHE_MEX):
-        cachear_features_mexicano()
-    d = torch.load(RUTA_CACHE_MEX)
+def cargar_mexicano(colornorm=False):
+    ruta = RUTA_CACHE_MEX.replace(".pt", "_norm.pt") if colornorm else RUTA_CACHE_MEX
+    if not os.path.exists(ruta):
+        cachear_features_mexicano(colornorm=colornorm)
+    d = torch.load(ruta)
     return d["nombres"], d["X"], d["Y"]
+
+
+# ---------------------------------------------------------------------------
+# Idea del autor: ¿el salto de dominio es por cámara/color (arreglable con un
+# filtro) o por la población en sí?  Dos formas de probarlo:
+#   colornorm  -> normalizar el color de las fotos mexicanas al de DFUTissue.
+#   aug        -> entrenar DFUTissue con aumentación fuerte de cámara/color.
+# ---------------------------------------------------------------------------
+def _stats_color_dfu():
+    """Media y desv. por canal (RGB, escala 0-1) sobre las imágenes crudas de DFUTissue."""
+    ms, ss, n = np.zeros(3), np.zeros(3), 0
+    for split in ("train", "val", "test"):
+        ds = DFUTissueSeg(split, augment=False)
+        for i in range(len(ds)):
+            img, _ = ds._cargar(i)
+            x = img.astype(np.float64) / 255.0
+            ms += x.reshape(-1, 3).mean(0); ss += x.reshape(-1, 3).std(0); n += 1
+    return ms / n, ss / n
+
+
+def _photometrico_aleatorio(img_u8, rng):
+    """Transformación fotométrica fuerte y aleatoria (balance de blancos, gamma,
+    brillo, desenfoque, JPEG). Para aumentación de entrenamiento."""
+    import io as _io
+
+    from PIL import Image as _Im
+    x = img_u8.astype(np.float32)
+    x = x * (0.8 + 0.4 * rng.random(3)).astype(np.float32)          # balance de blancos
+    x = 255.0 * np.clip(x / 255.0, 0, 1) ** (0.7 + 0.7 * rng.random())   # gamma
+    x = x * (0.75 + 0.5 * rng.random())                             # brillo
+    x = np.clip(x + rng.normal(0, 4 + 6 * rng.random(), x.shape), 0, 255).astype(np.uint8)
+    im = _Im.fromarray(x)
+    if rng.random() < 0.6:
+        im = im.filter(__import__("PIL.ImageFilter", fromlist=["GaussianBlur"])
+                       .GaussianBlur(0.4 + 1.4 * rng.random()))
+    buf = _io.BytesIO(); im.save(buf, format="JPEG", quality=int(25 + 65 * rng.random()))
+    return np.asarray(_Im.open(buf).convert("RGB"), dtype=np.uint8)
+
+
+def cachear_features_dfu_aug(n_copias=4, dispositivo=None, semilla=0, forzar=False) -> str:
+    """DFUTissue con `n_copias` versiones fotométricas aleatorias por imagen
+    (aumentación de cámara/color). Comparte etiquetas con el original."""
+    ruta = os.path.join(DIR_CACHE, f"features_dfutissue_aug{n_copias}.pt")
+    if os.path.exists(ruta) and not forzar:
+        return ruta
+    dispositivo = dispositivo or torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    os.makedirs(DIR_CACHE, exist_ok=True)
+    extractor = _extractor_congelado(dispositivo)
+    rng = np.random.default_rng(semilla)
+    bolsas, etiquetas = [], []
+    for split in ("train", "val", "test"):
+        ds = DFUTissueSeg(split, augment=False)
+        for i in range(len(ds)):
+            img, ann = ds._cargar(i)
+            pres = torch.zeros(NUM_CLASES)
+            for c in (1, 2, 3):
+                if int((ann == c).sum()) >= MIN_PIXELES:
+                    pres[c - 1] = 1.0
+            for _ in range(n_copias):
+                aug = _photometrico_aleatorio(img, rng)
+                x = (aug.astype(np.float32) / 255.0 - _MEAN) / _STD
+                x = torch.from_numpy(np.ascontiguousarray(x.transpose(2, 0, 1)))
+                with torch.no_grad():
+                    fmap = extractor(x.unsqueeze(0).to(dispositivo))
+                bolsas.append(fmap.squeeze(0).flatten(1).t().contiguous().cpu())
+                etiquetas.append(pres.clone())
+    torch.save({"X": torch.stack(bolsas), "Y": torch.stack(etiquetas)}, ruta)
+    print(f"[cache-aug] {len(bolsas)} bolsas ({n_copias}x) -> {os.path.relpath(ruta, RAIZ_REPO)}")
+    return ruta
+
+
+def cargar_dfu_aug(n_copias=4):
+    ruta = os.path.join(DIR_CACHE, f"features_dfutissue_aug{n_copias}.pt")
+    if not os.path.exists(ruta):
+        cachear_features_dfu_aug(n_copias)
+    d = torch.load(ruta)
+    return d["X"], d["Y"]
 
 
 # ---------------------------------------------------------------------------
