@@ -26,6 +26,9 @@ comil_resultados*.zip
 
 # Salidas del modulo de aprendizaje continuo (cache de features, matrices R, boxplots).
 Pesos_Entrenados/continual/
+# Salidas del experimento A (DINOv2): cache de features y metadatos de corridas.
+Pesos_Entrenados/dinov2_seg_*/
+Pesos_Entrenados/dinov2_cache/
 
 # Excepcion: figuras reales de la bitacora/tesis (no son dataset clinico, son
 # resultados/diagramas que si deben versionarse)
